@@ -1191,7 +1191,11 @@ function activityRows(member) {
   ].filter(row => row.title);
 }
 
-function showMemberProfile(member, trigger, isOwn = member.id === session?.room.memberId) {
+function roomMember(current, id) {
+  return current.members.find(member => member.id === id || member.memberIds?.includes(id));
+}
+
+function showMemberProfile(member, trigger, isOwn = Boolean(member.mine) || member.id === session?.room.memberId) {
   memberCardAnchorTop = trigger.getBoundingClientRect().top;
   closeDialog();
   const popup = $('member-card');
@@ -1307,7 +1311,7 @@ function makePeople(members) {
     const initials = avatar(member.name, member.id, member.color, member.avatar);
     initials.classList.toggle('online', member.online);
     const detail = element('span', 'person-detail');
-    detail.append(element('strong', '', member.name + (session.room.memberId === member.id ? ' (you)' : '')));
+    detail.append(element('strong', '', member.name + (member.mine || session.room.memberId === member.id ? ' (you)' : '')));
     detail.append(element('small', '', `${member.host ? 'Host · ' : ''}${member.online ? 'Online' : 'Away'}`));
     if (member.status) detail.append(element('small', 'person-status', member.status));
     for (const activity of activityRows(member)) {
@@ -1985,7 +1989,7 @@ function appendMessages(current, messages) {
     const author = authorOf(message);
     const row = element('article', `message ${kind}${mine ? ' mine' : ''}`);
     row.id = `message-${message.id}`;
-    const member = current.members.find(person => person.id === message.member_id);
+    const member = roomMember(current, message.member_id);
     const initials = avatar(author, message.member_id, message.color, member?.avatar);
     if (kind !== 'person') {
       initials.dataset.color = kind === 'assistant' ? '1' : '3';
@@ -2000,7 +2004,7 @@ function appendMessages(current, messages) {
       const profile = element('button', 'message-author', name);
       profile.setAttribute('aria-haspopup', 'dialog');
       profile.addEventListener('click', () => {
-        const member = current.members.find(entry => entry.id === message.member_id);
+        const member = roomMember(current, message.member_id);
         if (session === current && member) showMemberProfile(member, profile, mine);
       });
       byline.append(profile);
@@ -2070,7 +2074,7 @@ function appendMessages(current, messages) {
 }
 
 function updateMessageAuthors(current) {
-  const people = new Map(current.members.map(member => [member.id, member]));
+  const people = new Map(current.members.flatMap(member => (member.memberIds ?? [member.id]).map(id => [id, member])));
   for (const row of $('messages').querySelectorAll('[data-member-id]')) {
     const member = people.get(row.dataset.memberId);
     if (!member) continue;

@@ -226,7 +226,8 @@ export function createRoomBoard(ui) {
     }
     if (kind === 'task') {
       for (const member of current.members) elements.assigneeId.add(new Option(member.name, member.id));
-      elements.assigneeId.value = previous?.assignee_id ?? '';
+      const assigneeId = previous?.assignee_id;
+      elements.assigneeId.value = current.members.find(member => member.id === assigneeId || member.memberIds?.includes(assigneeId))?.id ?? assigneeId ?? '';
     }
     handleForm(async data => {
       const input = { ...Object.fromEntries(data), id, kind, version: previous?.version };

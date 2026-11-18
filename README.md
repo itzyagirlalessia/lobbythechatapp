@@ -8,6 +8,10 @@ The working app is hosted at https://duo-chat-workspace.itzyagirlalessia.chatgpt
 
 This export contains source code, database migrations, and automated checks. It contains no production database, uploads, runtime secrets, or Git history. Uploading this repository does not migrate the live app or its users.
 
+## Updates
+
+Completed app changes made through this Codex workspace are synced to this repository as part of the update. GitHub Actions runs the checks on each push. Live publication on the existing Sites host is a separate step; a GitHub push does not automatically deploy that host. Changes made outside the workspace are not automatically mirrored.
+
 ## Build and check
 
 Use Node.js 24 or newer. The project has no package dependencies to install.

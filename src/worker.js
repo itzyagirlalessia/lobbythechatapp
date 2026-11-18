@@ -448,7 +448,8 @@ async function lastfmTrack(key, user) {
 async function roomActivity(env, roomId, memberId) {
   if (!memberId || !idPattern.test(memberId)) throw new AppError(400, 'Choose a room member.');
   const entry = await env.DB.prepare(`SELECT p.steam, p.lastfm FROM members m JOIN profiles p ON p.account_id = m.account_id
-    WHERE m.id = ? AND m.room_id = ? AND p.share_activity = 1 AND m.last_seen > ?`)
+    WHERE m.id = ? AND m.room_id = ? AND p.share_activity = 1 AND EXISTS (
+      SELECT 1 FROM members active WHERE active.room_id = m.room_id AND active.account_id = m.account_id AND active.last_seen > ?)`)
     .bind(memberId, roomId, Date.now() - onlineWindow).first();
   if (!entry) return { game: '', music: '' };
   const keys = liveProviders(env);
@@ -672,6 +673,21 @@ function messageId(value) {
 
 function memberActor(member) {
   return member.account_id ? `account:${member.account_id}` : `member:${member.id}`;
+}
+
+function uniqueRoomPeople(rows, viewer) {
+  const people = new Map();
+  for (const row of rows) {
+    const actor = memberActor(row);
+    let person = people.get(actor);
+    if (!person) {
+      person = { ...row, memberIds: [], mine: actor === memberActor(viewer) };
+      people.set(actor, person);
+    }
+    person.memberIds.push(row.id);
+    person.last_seen = Math.max(person.last_seen, row.last_seen);
+  }
+  return [...people.values()].sort((a, b) => b.is_host - a.is_host || (a.display_name || a.name).localeCompare(b.display_name || b.name, undefined, { sensitivity: 'base' }));
 }
 
 function bumpRoomRevision(db, roomId) {
@@ -1296,7 +1312,7 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
       p.game, p.music, p.share_activity, p.steam, p.lastfm, p.spotify, p.avatar_key, p.banner_key, p.details_json, p.username, p.status_text, p.status_until
       FROM members m LEFT JOIN profiles p ON p.account_id = m.account_id
       WHERE m.room_id = ? AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor = CASE WHEN m.account_id IS NOT NULL THEN 'account:' || m.account_id ELSE 'member:' || m.id END)
-      ORDER BY m.is_host DESC, coalesce(p.display_name, m.name) COLLATE NOCASE`).bind(roomId),
+      ORDER BY m.is_host DESC, m.rowid`).bind(roomId),
     db.prepare(`SELECT msg.id, msg.member_id, msg.kind, msg.created_at, msg.edited_at, msg.pinned_at, msg.reply_to,
       coalesce(p.display_name, m.name) AS name, p.color,
       coalesce(m.id = ? OR m.account_id = ?, 0) AS mine,
@@ -1373,10 +1389,11 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
     reset,
     aiConnected: Boolean(member.ai_key),
     aiThinking: member.ai_until > now && (member.ai_channel ?? 'general') === channel,
-    typing: people.results.filter(person => person.id !== member.id && (!member.account_id || person.account_id !== member.account_id)
-      && person.typing_channel === channel && person.typing_until > now).slice(0, 3).map(person => person.display_name || person.name),
-    members: people.results.map(person => ({
-      id: person.id, name: person.display_name || person.name, username: person.username || '', color: person.color, bio: person.bio || '',
+    typing: [...new Map(people.results.filter(person => person.id !== member.id && (!member.account_id || person.account_id !== member.account_id)
+      && person.typing_channel === channel && person.typing_until > now).map(person => [memberActor(person), person.display_name || person.name])).values()].slice(0, 3),
+    members: uniqueRoomPeople(people.results, member).map(person => ({
+      id: person.id, memberIds: person.memberIds, mine: person.mine,
+      name: person.display_name || person.name, username: person.username || '', color: person.color, bio: person.bio || '',
       status: activeStatus(person, now),
       avatar: mediaUrl(person.avatar_key), banner: mediaUrl(person.banner_key), details: JSON.parse(person.details_json || '[]'),
       host: Boolean(person.is_host), online: person.last_seen > now - onlineWindow,
