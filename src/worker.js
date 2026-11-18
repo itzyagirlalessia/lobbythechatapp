@@ -1095,6 +1095,37 @@ async function joinRoom(db, input, account) {
   return { id: room.id, ...roomIdentity(room), invite, inviteVersion: room.invite_version, access, memberId, name, host: false };
 }
 
+async function accountRooms(db, account) {
+  if (!account) return { rooms: [] };
+  const { results } = await db.prepare(`
+    SELECT r.id, r.title, r.description, r.accent, r.icon_key, r.invite_version, max(m.is_host) AS host
+    FROM members m JOIN rooms r ON r.id = m.room_id
+    WHERE m.account_id = ? AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = r.id AND b.actor = 'account:' || m.account_id)
+    GROUP BY r.id ORDER BY max(m.last_seen) DESC LIMIT 100
+  `).bind(account).all();
+  return { rooms: results.map(room => ({ id: room.id, ...roomIdentity(room), inviteVersion: room.invite_version, host: Boolean(room.host) })) };
+}
+
+async function restoreRoom(db, input, account) {
+  if (!account) throw new AppError(401, 'Sign in to restore your rooms.');
+  const roomId = typeof input.roomId === 'string' ? input.roomId : '';
+  if (!idPattern.test(roomId)) throw new AppError(400, 'Choose a room to restore.');
+  const latest = await db.prepare(`
+    SELECT m.name, m.is_host, r.title, r.description, r.accent, r.icon_key, r.invite_version
+    FROM members m JOIN rooms r ON r.id = m.room_id
+    WHERE m.room_id = ? AND m.account_id = ? ORDER BY m.is_host DESC, m.last_seen DESC LIMIT 1
+  `).bind(roomId, account).first();
+  if (!latest) throw new AppError(404, 'You are not in this room. Join it with an invite link.');
+  if (await db.prepare('SELECT 1 FROM room_bans WHERE room_id = ? AND actor = ?').bind(roomId, `account:${account}`).first()) {
+    throw new AppError(403, 'You are banned from this room. Contact its host to appeal.', 'room_banned');
+  }
+  const memberId = crypto.randomUUID();
+  const access = token();
+  await db.prepare('INSERT INTO members (id, room_id, token_hash, name, is_host, last_seen, account_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(memberId, roomId, await hash(access), latest.name, latest.is_host ? 1 : 0, Date.now(), account).run();
+  return { id: roomId, ...roomIdentity(latest), inviteVersion: latest.invite_version, access, memberId, name: latest.name, host: Boolean(latest.is_host) };
+}
+
 async function authenticate(db, request, roomId) {
   const access = request.headers.get('Authorization')?.match(/^Bearer ([a-f0-9]{48})$/)?.[1];
   if (!access) throw new AppError(401, 'Join the room first.');
@@ -1557,6 +1588,8 @@ async function handleApi(request, env, ctx, url) {
   if (url.pathname === '/api/social' || url.pathname.startsWith('/api/social/')) return handleSocial(env.DB, request, url, account);
   if (method === 'POST' && url.pathname === '/api/rooms') return json(await createRoom(env.DB, await body(request), account), 201);
   if (method === 'POST' && url.pathname === '/api/join') return json(await joinRoom(env.DB, await body(request), account), 201);
+  if (method === 'GET' && url.pathname === '/api/my-rooms') return json(await accountRooms(env.DB, account));
+  if (method === 'POST' && url.pathname === '/api/my-rooms/restore') return json(await restoreRoom(env.DB, await body(request), account), 201);
   const route = url.pathname.match(/^\/api\/rooms\/([a-f0-9-]+)(?:\/([a-z-]+))?$/);
   if (!route || !idPattern.test(route[1])) throw new AppError(404, 'Room endpoint not found.');
   const [, roomId, action] = route;

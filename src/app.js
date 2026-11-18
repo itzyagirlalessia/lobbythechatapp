@@ -273,17 +273,52 @@ function showRoomForm({ title, invite, joining = false } = {}) {
   });
 }
 
+async function restoreAccess(room) {
+  const restored = await api('/my-rooms/restore', { input: { roomId: room.id } });
+  Object.assign(room, { access: restored.access, memberId: restored.memberId, name: restored.name, host: restored.host });
+  if (!room.invite) room.inviteVersion = restored.inviteVersion;
+  saveStorage();
+  return room;
+}
+
+// The room list lives in this browser's storage. Signed-in accounts also get back
+// rooms they joined in another browser, on another device, or before storage was cleared.
+async function syncAccountRooms() {
+  if (!selfProfile?.username) return;
+  let rooms;
+  try {
+    ({ rooms } = await api('/my-rooms'));
+  } catch {
+    return;
+  }
+  let added = 0;
+  for (const entry of rooms) {
+    if (saved.rooms.some(room => room.id === entry.id)) continue;
+    try {
+      const room = await restoreAccess({ ...entry });
+      if (saved.rooms.some(known => known.id === room.id)) continue;
+      saved.rooms.push(room);
+      added++;
+    } catch {
+      // A room that can't be restored now stays reachable through its invite link.
+    }
+  }
+  if (!added) return;
+  saveStorage();
+  renderNav();
+}
+
 function showInvite() {
   if (!session) return;
   const current = session;
   const { room } = current;
-  const valid = (room.inviteVersion ?? 0) === current.inviteVersion;
+  const valid = Boolean(room.invite) && (room.inviteVersion ?? 0) === current.inviteVersion;
   const url = new URL('/', location.origin);
   url.hash = `join=${room.invite}`;
   showDialog('Invite people', valid ? `<p>Share this link with people you want in the room.</p>
     <div class="dialog-form"><label class="field">Room invite link<input id="invite-link" readonly></label>
     <div class="dialog-actions" id="invite-actions"><button class="button primary" id="copy-invite">${icon('copy')} Copy link</button></div></div>`
-    : '<p>The invite link was replaced. Ask the room host for the current link.</p><div class="dialog-actions below" id="invite-actions"></div>');
+    : `<p>${room.invite ? 'The invite link was replaced.' : 'This browser doesn’t have the invite link.'} Ask the room host for the current link.</p><div class="dialog-actions below" id="invite-actions"></div>`);
   if (room.host) {
     const replace = element('button', 'button outline', 'Replace invite link');
     replace.addEventListener('click', () => showInviteReplacement(current));
@@ -353,6 +388,7 @@ function showUsernameSetup() {
     closeDialog();
     if (session && !location.hash) void refresh(session);
     else restorePage();
+    void syncAccountRooms();
   });
 }
 
@@ -2206,6 +2242,15 @@ async function refresh(current) {
       return;
     }
     if (error.status === 401) {
+      if (!current.restoreTried && selfProfile?.username) {
+        current.restoreTried = true;
+        try {
+          await restoreAccess(current.room);
+          return;
+        } catch {
+          if (session !== current) return;
+        }
+      }
       saved.rooms = saved.rooms.filter(room => room.id !== current.room.id);
       openHome();
       toast(error.message);
@@ -2684,5 +2729,8 @@ applyPreferences();
 void api('/profile').then(data => {
   applyOwnProfile(data);
   if (data.signedIn && !data.profile.username) showUsernameSetup();
-  else restorePage();
+  else {
+    restorePage();
+    void syncAccountRooms();
+  }
 }).catch(restorePage);
