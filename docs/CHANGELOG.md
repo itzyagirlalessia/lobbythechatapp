@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-18
 
+- **[Wilmer]** Pull requests now get an automatic comment tagging itzyagirlalessia with the changes on every push and merge.
 - **[itzyagirlalessia]** Renamed the app Lobby, created Pluma the purple moth mascot, and updated the app branding, Terms and Copyright pages.
 - **[Wilmer]** Added this changelog.
 - **[itzyagirlalessia]** Added a safe GitHub pull helper and shared Codex/Claude collaboration rules (`AGENTS.md`, `CLAUDE.md`).
