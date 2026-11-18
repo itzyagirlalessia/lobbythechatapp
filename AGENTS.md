@@ -13,3 +13,18 @@ The user collaborates with another developer using Claude. GitHub is the shared 
 - For every pushed change, add a one-line entry at the top of `docs/CHANGELOG.md` under today's date, tagged `[itzyagirlalessia]` for changes made here. Keep the other developer's entries intact.
 - Run `node scripts/verify.mjs` for changes to chat behavior, `node scripts/verify-github-sync.mjs` for pull-workflow changes, and check modified JavaScript syntax. Verify the GitHub check run after pushing. Report a failed or incomplete sync explicitly.
 - GitHub checks validate code only. Pulls happen when this workspace is used or the pull command is run; there is no background watcher. A collaborator's push does not automatically deploy the live Sites app. Review and test incoming app changes before publishing. If Sites publishing tools are unavailable, contribute through GitHub and clearly report that live publication still needs the Sites workflow.
+
+## Client code layout
+
+The browser app is split into ES modules in `src/` (no bundler). Each file starts with a one-line description.
+
+- `app.js`: entry point, navigation, room refresh loop, event wiring
+- `state.js`: saved browser data and the shared `state` object
+- `ui.js`: DOM helpers, dialogs, toasts, API client
+- `rooms.js`, `profile.js`, `room-settings.js`, `voice-ui.js`, `people.js`, `messages.js`, `history.js`, `composer.js`, `settings.js`: one feature area each
+- `board.js`, `social.js`, `voice.js`, `pictures.js`, `formatting.js`: self-contained feature modules
+
+Rules:
+- Values that several modules replace (`session`, `admin`, `selfProfile`, `providers`, `usernameSetup`, `refreshTimer`, `mentionSuggestions`, `bookmarks`) live on `state` in `state.js`. Read and assign them as `state.session` etc., never through a local copy.
+- Modules import each other's functions directly; cycles are fine because modules only declare functions and constants at the top level. Do not call imported functions at module top level, except in `app.js`.
+- Register every new browser file in `scripts/build.mjs`.
