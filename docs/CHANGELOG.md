@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-18
 
+- **[Wilmer]** Faster loading and lighter polling: Pluma image 1.36 MB → 0.37 MB, unchanged files are no longer re-downloaded, fewer database calls per room refresh, and duplicate device sessions no longer count toward the 100-person room limit.
 - **[Wilmer]** Fixed joined rooms disappearing in new sessions: signed-in accounts now get their rooms back automatically, without the invite link.
 - **[Wilmer]** Fewer GitHub Actions runs: removed the notify workflow (Claude posts the comment itself) and stopped double checks on pull request branches.
 - **[Wilmer]** Pull requests now get an automatic comment tagging itzyagirlalessia with the changes on every push and merge.

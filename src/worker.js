@@ -830,6 +830,10 @@ async function changeQueueItem(db, roomId, member, input) {
 
 async function deliverScheduled(db, roomId) {
   const now = Date.now();
+  // Runs on every room poll: a cheap indexed read avoids two write statements when nothing is due.
+  const due = await db.prepare("SELECT 1 FROM room_queue WHERE room_id = ? AND state = 'pending' AND due_at <= ? AND kind = 'message' LIMIT 1")
+    .bind(roomId, now).first();
+  if (!due) return;
   await db.batch([
     db.prepare(`INSERT OR IGNORE INTO messages (room_id, channel, member_id, text, request_id, created_at)
       SELECT q.room_id, q.channel, q.member_id, q.text, q.id, ? FROM room_queue q
@@ -1087,10 +1091,11 @@ async function joinRoom(db, input, account) {
   const access = token();
   const joined = await db.prepare(`
     INSERT INTO members (id, room_id, token_hash, name, last_seen, account_id)
-    SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT count(*) FROM members WHERE room_id = ?) < 100
+    SELECT ?, ?, ?, ?, ?, ? WHERE ((SELECT count(DISTINCT coalesce(account_id, id)) FROM members WHERE room_id = ?) < 100
+      OR (? IS NOT NULL AND EXISTS (SELECT 1 FROM members WHERE room_id = ? AND account_id = ?)))
     AND EXISTS (SELECT 1 FROM rooms WHERE id = ? AND invite_hash = ?)
     RETURNING id
-  `).bind(memberId, room.id, await hash(access), name, Date.now(), account, room.id, room.id, inviteHash).first();
+  `).bind(memberId, room.id, await hash(access), name, Date.now(), account, room.id, account, room.id, account, room.id, inviteHash).first();
   if (!joined) throw new AppError(409, 'This invite has changed or the room is full.');
   return { id: room.id, ...roomIdentity(room), invite, inviteVersion: room.invite_version, access, memberId, name, host: false };
 }
@@ -1129,23 +1134,25 @@ async function restoreRoom(db, input, account) {
 async function authenticate(db, request, roomId) {
   const access = request.headers.get('Authorization')?.match(/^Bearer ([a-f0-9]{48})$/)?.[1];
   if (!access) throw new AppError(401, 'Join the room first.');
+  const account = accountId(request);
+  // The ban check is part of this query so every room request needs one database round trip instead of two.
   const member = await db.prepare(`
     SELECT m.id, m.name, m.is_host, m.last_seen, m.account_id, r.title, r.description, r.accent, r.icon_key,
-      r.ai_key, r.ai_until, r.ai_channel, r.moderation_version, r.invite_version
+      r.ai_key, r.ai_until, r.ai_channel, r.moderation_version, r.invite_version,
+      EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor =
+        CASE WHEN coalesce(m.account_id, ?) IS NOT NULL THEN 'account:' || coalesce(m.account_id, ?) ELSE 'member:' || m.id END) AS banned
     FROM members m JOIN rooms r ON m.room_id = r.id
     WHERE m.room_id = ? AND m.token_hash = ?
-  `).bind(roomId, await hash(access)).first();
+  `).bind(account, account, roomId, await hash(access)).first();
   if (!member) throw new AppError(401, 'This room session has expired. Rejoin with an invite link.');
-  const account = accountId(request);
   if (!member.account_id && account) {
     await db.prepare('UPDATE members SET account_id = ? WHERE id = ? AND account_id IS NULL').bind(account, member.id).run();
     const linked = await db.prepare('SELECT account_id FROM members WHERE id = ?').bind(member.id).first();
     member.account_id = linked.account_id;
   }
   if (member.account_id && account !== member.account_id) throw new AppError(401, 'This room session belongs to another account. Rejoin with an invite link.');
-  if (await db.prepare('SELECT 1 FROM room_bans WHERE room_id = ? AND actor = ?').bind(roomId, memberActor(member)).first()) {
-    throw new AppError(403, 'You are banned from this room. Contact its host to appeal.', 'room_banned');
-  }
+  if (member.banned) throw new AppError(403, 'You are banned from this room. Contact its host to appeal.', 'room_banned');
+  delete member.banned;
   return member;
 }
 
@@ -1670,9 +1677,13 @@ export default {
     }
     const asset = assets[url.pathname];
     if (!asset) return new Response('Page not found', { status: 404, headers: security });
-    const [type, data] = asset;
-    return new Response(request.method === 'HEAD' ? null : data, {
-      headers: { ...security, 'Content-Type': type, 'Cache-Control': 'no-cache' },
-    });
+    const [type, data, etag] = asset;
+    const headers = { ...security, 'Content-Type': type, 'Cache-Control': 'no-cache' };
+    // Browsers revalidate on every load; an unchanged file costs a 304 instead of a full download.
+    if (etag) {
+      headers.ETag = etag;
+      if (request.headers.get('If-None-Match') === etag) return new Response(null, { status: 304, headers });
+    }
+    return new Response(request.method === 'HEAD' ? null : data, { headers });
   },
 };

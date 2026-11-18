@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
@@ -20,7 +21,8 @@ const entries = await Promise.all(files.map(async ([route, name, type]) => {
   const binary = type === 'image/png';
   const data = await read(`src/${name}`, binary ? 'base64' : 'utf8');
   const contents = binary ? `Uint8Array.from(atob(${JSON.stringify(data)}), char => char.charCodeAt(0))` : JSON.stringify(data);
-  return `${JSON.stringify(route)}: [${JSON.stringify(type)}, ${contents}]`;
+  const etag = `"${createHash('sha256').update(data).digest('hex').slice(0, 32)}"`;
+  return `${JSON.stringify(route)}: [${JSON.stringify(type)}, ${contents}, ${JSON.stringify(etag)}]`;
 }));
 const worker = (await read('src/worker.js', 'utf8')).replace("import { assets } from './assets.js';", `const assets = {\n${entries.join(',\n')}\n};`);
 await mkdir(new URL('dist/server/', root), { recursive: true });
