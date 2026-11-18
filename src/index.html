@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#15151d">
+  <meta name="description" content="A shared group chat for friends and ChatGPT.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+  <title>Duo Chat</title>
+</head>
+<body>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="duo" viewBox="0 0 24 24"><path d="M4 5h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7.3L4 17v-3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M17 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2v2.5L16.7 18H12a2 2 0 0 1-1.8-1.1"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="join" viewBox="0 0 24 24"><path d="M12 5h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6M3 12h12m-4-4 4 4-4 4"/></symbol>
+    <symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 21v-7h6v7"/></symbol>
+    <symbol id="chat" viewBox="0 0 24 24"><path d="M20 10.9c0 4-3.6 7.2-8 7.2-1 0-2-.2-2.9-.5L5 20l1.2-3.6A7 7 0 0 1 4 10.9c0-4 3.6-7.2 8-7.2s8 3.2 8 7.2Z"/><path d="M8.4 11h.1m3.5 0h.1m3.5 0h.1" stroke-width="2.4"/></symbol>
+    <symbol id="link" viewBox="0 0 24 24"><path d="m10 7 2-2a5 5 0 0 1 7 7l-2 2m-3 3-2 2a5 5 0 0 1-7-7l2-2m2 5 6-6"/></symbol>
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M10 3c1.1 4.9 2.1 5.9 7 7-4.9 1.1-5.9 2.1-7 7-1.1-4.9-2.1-5.9-7-7 4.9-1.1 5.9-2.1 7-7Zm9 12v6m3-3h-6"/></symbol>
+    <symbol id="game" viewBox="0 0 24 24"><path d="M7.2 7h9.6a4.5 4.5 0 0 1 4.4 3.7l.7 4.9a2.5 2.5 0 0 1-4.3 2.1L15.9 16H8.1l-1.7 1.7a2.5 2.5 0 0 1-4.3-2.1l.7-4.9A4.5 4.5 0 0 1 7.2 7ZM7 10v4m-2-2h4m7.5-.4h.1m2 2.2h.1"/></symbol>
+    <symbol id="bulb" viewBox="0 0 24 24"><path d="M9 18h6m-5 3h4M8 14.5a6 6 0 1 1 8 0c-.7.7-1 1.1-1 2.5H9c0-1.4-.3-1.8-1-2.5Z"/></symbol>
+    <symbol id="right" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="send" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+    <symbol id="people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 5.5a3 3 0 0 1 0 6m2 3a4 4 0 0 1 3 4V20"/></symbol>
+    <symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.3 9.3a2.7 2.7 0 1 1 4.9 1.5c-1 1.2-2.2 1.2-2.2 3m0 3h.1"/></symbol>
+    <symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></symbol>
+    <symbol id="hash" viewBox="0 0 24 24"><path d="m10 4-3 16m10-16-3 16M5 9h15M4 15h15"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="M12 22s7-3.5 7-10V5l-7-3-7 3v7c0 6.5 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="hide" viewBox="0 0 24 24"><path d="M3 3l18 18M10 10a3 3 0 0 0 4 4M10.4 5.1A10.4 10.4 0 0 1 12 5c5 0 9 7 9 7a15 15 0 0 1-3 3.5M6.4 6.5C4.4 8.1 3 12 3 12s4 7 9 7a8 8 0 0 0 3.9-1.1"/></symbol>
+    <symbol id="show" viewBox="0 0 24 24"><path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+    <symbol id="music" viewBox="0 0 24 24"><path d="M9 17V6l11-3v11M9 9l11-3"/><ellipse cx="6.5" cy="17.5" rx="2.5" ry="2"/><ellipse cx="17.5" cy="14.5" rx="2.5" ry="2"/></symbol>
+    <symbol id="edit" viewBox="0 0 24 24"><path d="m14.5 5.5 4 4M4 20l4.5-1 11-11a2.8 2.8 0 0 0-4-4l-11 11L4 20Z"/></symbol>
+    <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="layers" viewBox="0 0 24 24"><path d="m12 4 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5m-18 4 9 5 9-5"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4.5 4.5"/></symbol>
+    <symbol id="pin" viewBox="0 0 24 24"><path d="m9 3 12 12-4 1-2 4-4.2-4.2L4 22l6.2-6.8L6 11l4-2-1-6Z"/></symbol>
+    <symbol id="reply" viewBox="0 0 24 24"><path d="m9 6-5 5 5 5m-5-5h9a6 6 0 0 1 6 6v1"/></symbol>
+    <symbol id="reaction" viewBox="0 0 24 24"><circle cx="11" cy="12" r="7"/><path d="M8 13.5a3.4 3.4 0 0 0 6 0M8.5 10h.01m4.99 0h.01M19 3v6m-3-3h6"/></symbol>
+    <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="trash" viewBox="0 0 24 24"><path d="M5 7h14m-12 0 1 13h8l1-13m-7 0V4h4v3M10 11v5m4-5v5"/></symbol>
+    <symbol id="image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m4 17 4.5-4.5 3 3L16 11l4 4"/></symbol>
+    <symbol id="poll" viewBox="0 0 24 24"><path d="M5 20h14M7 17v-5m5 5V5m5 12V9"/></symbol>
+    <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v1a6 6 0 0 0 12 0v-1m-6 7v3m-4 0h8"/></symbol>
+    <symbol id="headphones" viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 1 1 16 0v2"/><rect x="4" y="13" width="4" height="6" rx="1.5"/><rect x="16" y="13" width="4" height="6" rx="1.5"/></symbol>
+    <symbol id="speaker" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4Zm12 0a4 4 0 0 1 0 6m2.5-8.5a7 7 0 0 1 0 11"/></symbol>
+    <symbol id="bookmark" viewBox="0 0 24 24"><path d="M6 4h12v16l-6-4-6 4V4Z"/></symbol>
+    <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4 10-9"/></symbol>
+    <symbol id="inbox" viewBox="0 0 24 24"><path d="m4 6-2 8v5h20v-5l-2-8H4Zm-2 8h6l2 3h4l2-3h6"/></symbol>
+    <symbol id="status" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.5 14a4 4 0 0 0 7 0M9 10h.01m6 0h.01"/></symbol>
+    <symbol id="bell-off" viewBox="0 0 24 24"><path d="M3 3l18 18M7 7a6 6 0 0 0-1 3v4l-2 2v2h13m3-2-2-2v-4a6 6 0 0 0-6-6m-2 17h4"/></symbol>
+    <symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="board" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 10h18m-11 0v11"/></symbol>
+  </svg>
+
+  <div class="navigation-chrome" id="sidebar">
+    <nav class="room-rail" aria-label="Room shortcuts">
+      <button class="rail-button brand-mark selected" id="brand" title="Duo Chat home" aria-label="Duo Chat home"><svg class="icon"><use href="#duo"/></svg></button>
+      <button class="rail-button friends-rail" id="friends-rail" title="Friends &amp; DMs" aria-label="Friends and DMs"><svg class="icon"><use href="#people"/></svg><span id="social-count" class="social-count" hidden></span></button>
+      <div class="rail-rule"></div>
+      <div class="rail-rooms" id="room-shortcuts"></div>
+      <button class="rail-button rail-add" id="rail-new-room" title="New room" aria-label="New room"><svg class="icon"><use href="#plus"/></svg></button>
+      <button class="rail-button rail-help" id="help-button" title="How it works" aria-label="How it works"><svg class="icon"><use href="#help"/></svg></button>
+    </nav>
+    <aside class="sidebar">
+      <div class="sidebar-title"><span id="sidebar-title">Duo Chat</span><button class="icon-button sidebar-close" id="close-sidebar" aria-label="Close menu"><svg class="icon"><use href="#close"/></svg></button></div>
+      <button class="switcher-button" id="quick-switcher" aria-label="Quick switcher"><svg class="icon"><use href="#search"/></svg><span>Quick switcher</span><kbd>Ctrl K</kbd></button>
+      <nav id="home-navigation" class="sidebar-menu" aria-label="Main navigation">
+        <button id="home-button" class="nav-button selected" aria-current="page"><svg class="icon"><use href="#home"/></svg> Home</button>
+        <button id="friends-button" class="nav-button"><svg class="icon"><use href="#people"/></svg> Friends &amp; DMs</button>
+        <button id="new-room" class="nav-button"><svg class="icon"><use href="#plus"/></svg> New room</button>
+      </nav>
+      <div class="room-nav" id="home-room-nav">
+        <h2>Your rooms</h2>
+        <div id="room-list"></div>
+      </div>
+      <div class="room-hub" id="room-hub" hidden>
+        <button class="room-hub-main" id="room-info" title="Room overview"><span id="room-hub-icon"></span><span class="room-hub-name"><strong id="room-hub-title"></strong><small id="room-hub-description"></small></span></button>
+        <button class="icon-button room-hub-settings" id="room-settings" type="button" aria-label="Room settings" title="Room settings" hidden><svg class="icon"><use href="#sliders"/></svg></button>
+      </div>
+      <nav class="channel-nav" id="channel-nav" aria-label="Room channels" hidden>
+        <button class="nav-button board-navigation" id="room-board"><svg class="icon"><use href="#board"/></svg><span>Room board</span><small id="board-plan-count" class="count" hidden></small></button>
+        <div class="channel-heading">
+          <h2>Text channels</h2>
+          <div class="channel-tools"><button class="icon-button" type="button" id="organize-channels" title="Organize channels" aria-label="Organize channels" hidden><svg class="icon"><use href="#layers"/></svg></button><button class="icon-button" type="button" id="add-channel" title="Create channel" aria-label="Create channel" hidden><svg class="icon"><use href="#plus"/></svg></button></div>
+        </div>
+        <div id="channel-list"></div>
+        <div class="channel-heading voice-heading"><h2>Voice channels</h2><button class="icon-button" id="add-voice-channel" aria-label="Create voice channel" title="Create voice channel" hidden><svg class="icon"><use href="#plus"/></svg></button></div>
+        <div id="voice-channel-list"></div>
+      </nav>
+      <div class="sidebar-tools"><button class="icon-button" id="saved-messages" title="Saved messages" aria-label="Saved messages"><svg class="icon"><use href="#bookmark"/></svg></button><button class="icon-button" id="set-status" title="Set a status" aria-label="Set a status"><svg class="icon"><use href="#status"/></svg></button><button class="icon-button" id="preferences" title="Preferences" aria-label="Preferences"><svg class="icon"><use href="#sliders"/></svg></button><button class="icon-button" id="shortcuts" title="Keyboard shortcuts" aria-label="Keyboard shortcuts"><svg class="icon"><use href="#help"/></svg></button></div>
+      <nav class="sidebar-legal" aria-label="Legal">
+        <a href="/terms">Terms</a>
+        <a href="/copyright">Copyright</a>
+      </nav>
+      <div class="voice-dock" id="voice-dock" hidden><button class="voice-dock-label" id="voice-status" aria-label="Open voice controls"><svg class="icon"><use href="#speaker"/></svg><span id="voice-dock-text"></span></button><div class="voice-dock-actions"><button class="icon-button" id="mute-voice" aria-label="Mute microphone" title="Mute microphone" aria-pressed="false"><svg class="icon"><use href="#mic"/></svg></button><button class="icon-button" id="deafen-voice" aria-label="Deafen" title="Deafen" aria-pressed="false"><svg class="icon"><use href="#headphones"/></svg></button><button class="icon-button" id="leave-voice" aria-label="Leave voice" title="Leave voice"><svg class="icon"><use href="#close"/></svg></button></div></div>
+      <button class="sidebar-profile" type="button" id="edit-profile" title="Edit your profile" aria-label="Edit your profile"><span class="avatar" id="profile-avatar" data-color="0">G</span><span class="profile-label"><strong id="profile-name">Guest</strong><small id="profile-detail">My profile</small></span><svg class="icon profile-edit-icon"><use href="#edit"/></svg></button>
+    </aside>
+  </div>
+  <button id="sidebar-backdrop" class="sidebar-backdrop" aria-label="Close menu" hidden></button>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-title">
+        <button id="open-sidebar" class="icon-button mobile-only" aria-label="Open menu" aria-expanded="false"><svg class="icon"><use href="#menu"/></svg></button>
+        <span id="crumb-icon" aria-hidden="true"><svg class="icon"><use href="#home"/></svg></span>
+        <span id="page-title">Home</span>
+        <span id="channel-topic" class="channel-topic" hidden></span>
+      </div>
+      <div class="topbar-actions">
+        <button id="voice-quick" class="icon-button voice-mobile" aria-label="Voice controls" title="Voice controls" hidden><svg class="icon"><use href="#speaker"/></svg></button>
+        <button id="people-button" class="icon-button mobile-people" aria-label="Room members" hidden><svg class="icon"><use href="#people"/></svg></button>
+        <button id="search-room" class="icon-button channel-action" aria-label="Search room" title="Search room" hidden><svg class="icon"><use href="#search"/></svg></button>
+        <button id="channel-pins" class="icon-button channel-action" aria-label="Pinned messages" title="Pinned messages" hidden><svg class="icon"><use href="#pin"/></svg></button>
+        <button id="mentions-inbox" class="icon-button channel-action inbox-button" aria-label="Mentions inbox" title="Mentions inbox" hidden><svg class="icon"><use href="#inbox"/></svg><span id="mentions-count" class="inbox-count" hidden></span></button>
+        <button id="channel-details" class="icon-button channel-action" aria-label="Channel details" title="Channel details" hidden><svg class="icon"><use href="#sliders"/></svg></button>
+        <button id="header-action" class="button outline"><svg class="icon"><use href="#join"/></svg><span>Join a room</span></button>
+      </div>
+    </header>
+
+    <main id="social-view" class="social-view" hidden>
+      <div id="social-layout" class="social-layout">
+        <aside class="social-sidebar" aria-label="Friends and direct messages">
+          <nav class="social-tabs" id="social-tabs" aria-label="People lists">
+            <button type="button" data-social-tab="friends" aria-pressed="true">Friends</button>
+            <button type="button" data-social-tab="requests" aria-pressed="false">Requests</button>
+            <button type="button" data-social-tab="blocked" aria-pressed="false">Blocked</button>
+          </nav>
+          <h2>Direct messages</h2><div id="direct-list"></div>
+          <p class="social-feedback" id="social-feedback" role="status"></p>
+        </aside>
+        <section id="friends-panel" class="friends-panel">
+          <div class="friends-intro"><span class="eyebrow">A place for your people</span><h1>Keep in touch.</h1><p>Add someone by their username and tag. Once they accept, you can message each other privately.</p></div>
+          <form id="add-friend-form" class="add-friend-form">
+            <label for="friend-username">Add a friend</label>
+            <div><input id="friend-username" name="username" placeholder="username#1234" maxlength="29" pattern="[A-Za-z0-9_]{3,24}#[0-9]{4}" autocomplete="off" autocapitalize="none" spellcheck="false" required aria-describedby="add-friend-feedback"><button id="add-friend-submit" class="button primary">Send request</button></div>
+            <p id="add-friend-feedback" class="social-feedback" role="status"></p>
+          </form>
+          <h2 class="social-list-title" id="social-list-title">Your friends</h2><div id="social-people"></div>
+        </section>
+        <section id="direct-panel" class="direct-panel" hidden aria-label="Direct conversation">
+          <header class="direct-header"><button type="button" id="direct-back" class="icon-button" title="Back to friends" aria-label="Back to friends"><svg class="icon"><use href="#close"/></svg></button><button type="button" id="direct-profile" class="direct-peer"><strong id="direct-title"></strong><small id="direct-subtitle"></small></button><button type="button" id="direct-block" class="button outline">Block</button></header>
+          <div id="direct-stream" class="direct-stream"><button type="button" id="direct-earlier" class="button outline" hidden>Load earlier messages</button><div id="direct-messages"></div></div>
+          <p id="direct-feedback" class="direct-feedback" role="status"></p>
+          <form id="direct-composer" class="direct-composer"><label class="visually-hidden" for="direct-input">Direct message</label><textarea id="direct-input" maxlength="4000" rows="2" placeholder="Write a private message…" required></textarea><button id="direct-send" class="button primary" disabled>Send</button></form>
+        </section>
+      </div>
+    </main>
+    <main id="home-view" class="home-view">
+      <section class="welcome">
+        <div class="welcome-copy">
+          <div class="hero-label"><svg class="icon"><use href="#people"/></svg> Group chat with ChatGPT</div>
+          <h1>Chat and play<br><em>together.</em></h1>
+          <p>Get your friends in one room to play a game, share ideas, or ask ChatGPT a question together.</p>
+          <button class="button primary" id="hero-create"><svg class="icon"><use href="#plus"/></svg> Create a room</button>
+        </div>
+        <img src="/hero.png" alt="" width="1448" height="1086" class="hero-image">
+      </section>
+      <section class="quick-section" aria-labelledby="quick-title">
+        <h2 id="quick-title">Start with an idea</h2>
+        <div class="quick-grid">
+          <button class="quick-card" data-room-title="Game night">
+            <span class="quick-icon game"><svg class="icon"><use href="#game"/></svg></span>
+            <span class="quick-text"><strong>Game night</strong><small>Play trivia or take turns guessing.</small></span>
+            <svg class="icon quick-arrow"><use href="#right"/></svg>
+          </button>
+          <button class="quick-card" data-room-title="Brainstorm">
+            <span class="quick-icon idea"><svg class="icon"><use href="#bulb"/></svg></span>
+            <span class="quick-text"><strong>Brainstorm</strong><small>Work through an idea as a group.</small></span>
+            <svg class="icon quick-arrow"><use href="#right"/></svg>
+          </button>
+          <button class="quick-card" data-room-title="The hangout">
+            <span class="quick-icon casual"><svg class="icon"><use href="#chat"/></svg></span>
+            <span class="quick-text"><strong>Just chatting</strong><small>Give the group a place to hang out.</small></span>
+            <svg class="icon quick-arrow"><use href="#right"/></svg>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <main id="board-view" class="board-view" hidden>
+      <div class="board-header"><div><p class="board-eyebrow" id="board-room-name"></p><h1>Room board</h1></div>
+        <button id="board-refresh" class="button outline">Refresh</button></div>
+      <nav class="board-tabs" id="board-tabs" aria-label="Room board views"></nav>
+      <div class="board-filters" id="board-filters">
+        <label><input type="checkbox" id="board-archived"> Include archived</label>
+        <label id="board-completed-label"><input type="checkbox" id="board-completed"> Show completed tasks</label>
+      </div>
+      <p class="board-feedback" id="board-feedback" role="status"></p>
+      <div class="board-content" id="board-content"></div>
+    </main>
+
+    <main id="room-view" class="room-view" hidden>
+      <section class="conversation" aria-label="Room conversation">
+        <div class="conversation-head">
+          <div>
+            <h1 id="room-title" class="visually-hidden"></h1>
+            <p id="room-subtitle" aria-live="polite">Connecting…</p>
+          </div>
+          <span class="live-status" id="live-status"><span></span> Connecting</span>
+        </div>
+        <div class="message-stream" id="message-stream" role="log" aria-label="Messages">
+          <button type="button" class="button subtle earlier-messages" id="earlier-messages" hidden>Earlier messages</button>
+          <div id="room-empty" class="room-empty">
+            <div class="empty-icon"><svg class="icon"><use href="#duo"/></svg></div>
+            <h2 id="empty-title">Welcome to #general</h2>
+            <p id="empty-hint">Invite your friends or try one of these starters.</p>
+            <div class="starters" id="starters"></div>
+          </div>
+          <div id="messages"></div>
+        </div>
+        <div class="composer-wrap">
+          <div class="history-note" id="history-note" hidden><span id="history-note-label">Viewing earlier messages</span><button class="button subtle" type="button" id="jump-latest">Jump to latest</button></div>
+          <div id="ai-thinking" class="thinking" role="status" hidden><span class="typing"><i></i><i></i><i></i></span> ChatGPT is replying</div>
+          <div id="people-typing" class="thinking" role="status" hidden><span class="typing"><i></i><i></i><i></i></span> <span id="typing-members"></span></div>
+          <p class="slow-mode-note" id="slow-mode-note" hidden></p>
+          <div class="reply-composer" id="reply-composer" hidden><div><strong id="reply-target"></strong><small id="reply-excerpt"></small></div><button type="button" class="icon-button" id="cancel-reply" aria-label="Cancel reply"><svg class="icon"><use href="#close"/></svg></button></div>
+          <form class="composer" id="composer">
+            <div class="image-attachment" id="image-attachment" hidden><div id="attachment-thumbnail"></div><div><strong>Image attached</strong><small id="attachment-description"></small></div><button type="button" class="icon-button" id="remove-attachment" aria-label="Remove attached image"><svg class="icon"><use href="#close"/></svg></button></div>
+            <textarea id="message-input" aria-label="Message" aria-autocomplete="list" aria-controls="mention-suggestions" rows="1" placeholder="Message the room…" maxlength="4000"></textarea>
+            <div id="mention-suggestions" class="mention-suggestions" role="listbox" aria-label="Room member suggestions" hidden></div>
+            <div class="composer-actions">
+              <div class="composer-tools">
+                <button class="icon-button composer-tool" type="button" id="format-message" aria-label="Formatting options" title="Formatting options" aria-expanded="false"><strong>Aa</strong></button>
+                <button class="icon-button composer-tool" type="button" id="attach-image" aria-label="Attach an image" title="Attach an image"><svg class="icon"><use href="#image"/></svg></button>
+                <button class="icon-button composer-tool" type="button" id="create-poll" aria-label="Create a poll" title="Create a poll"><svg class="icon"><use href="#poll"/></svg></button>
+                <button class="mention-button" id="mention" type="button"><svg class="icon"><use href="#spark"/></svg> <span>@ChatGPT</span></button>
+              </div>
+              <div class="send-tools"><button type="button" class="icon-button composer-tool" id="schedule-message" aria-label="Schedule a message" title="Schedule a message"><svg class="icon"><use href="#clock"/></svg></button><button class="send-button" id="send-message" title="Send message" aria-label="Send message" disabled><svg class="icon"><use href="#send"/></svg></button></div>
+            </div>
+            <div class="format-toolbar" id="format-toolbar" aria-label="Message formatting" hidden>
+              <button type="button" data-format="**"><strong>Bold</strong></button><button type="button" data-format="*"><em>Italic</em></button>
+              <button type="button" data-format="~~"><s>Strike</s></button><button type="button" data-format="&#96;">Code</button>
+              <button type="button" data-format="||">Spoiler</button>
+            </div>
+          </form>
+          <p class="composer-hint" id="composer-hint">Enter sends · Shift + Enter adds a line</p>
+        </div>
+      </section>
+      <aside class="room-details" id="room-details" aria-label="Room details">
+        <div class="people-heading"><h2>People</h2><span id="people-count" class="count">0</span></div>
+        <div id="people-list"></div>
+        <div class="room-side-card">
+          <div class="room-ai-head"><span class="quick-icon idea"><svg class="icon"><use href="#spark"/></svg></span><div><strong>ChatGPT</strong><small id="ai-status">Connect to use</small></div></div>
+          <button class="button subtle" id="ai-settings">Connect ChatGPT</button>
+        </div>
+        <div class="invite-note"><svg class="icon"><use href="#lock"/></svg><span>Anyone with this room’s invite link can join and see its messages.</span></div>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="dialog" aria-labelledby="dialog-title">
+    <div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" class="icon-button" id="close-dialog" aria-label="Close dialog"><svg class="icon"><use href="#close"/></svg></button></div>
+    <div id="dialog-body"></div>
+  </dialog>
+  <section class="member-popup" id="member-card" popover="auto" role="dialog" aria-labelledby="member-card-title">
+    <button class="icon-button member-popup-close" type="button" id="close-member-card" aria-label="Close profile" autofocus><svg class="icon"><use href="#close"/></svg></button>
+    <div id="member-profile"></div>
+    <div class="member-popup-actions" id="member-card-actions" hidden>
+      <button class="button subtle" type="button" id="edit-from-member-card"><svg class="icon"><use href="#edit"/></svg> Edit profile</button>
+    </div>
+  </section>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
