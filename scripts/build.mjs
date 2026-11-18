@@ -14,7 +14,7 @@ const files = [
   ['/social.js', 'social.js', 'text/javascript; charset=utf-8'],
   ['/formatting.js', 'formatting.js', 'text/javascript; charset=utf-8'],
   ['/favicon.svg', 'favicon.svg', 'image/svg+xml'],
-  ['/hero.png', 'hero.png', 'image/png'],
+  ['/pluma.png', 'pluma.png', 'image/png'],
 ];
 const entries = await Promise.all(files.map(async ([route, name, type]) => {
   const binary = type === 'image/png';
@@ -25,4 +25,4 @@ const entries = await Promise.all(files.map(async ([route, name, type]) => {
 const worker = (await read('src/worker.js', 'utf8')).replace("import { assets } from './assets.js';", `const assets = {\n${entries.join(',\n')}\n};`);
 await mkdir(new URL('dist/server/', root), { recursive: true });
 await writeFile(new URL('dist/server/index.js', root), worker);
-console.log('Built Duo Chat.');
+console.log('Built Lobby.');

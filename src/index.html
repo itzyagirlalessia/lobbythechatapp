@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#15151d">
-  <meta name="description" content="A shared group chat for friends and ChatGPT.">
+  <meta name="description" content="Lobby brings people together in rooms for conversation, games, music, and optional shared ChatGPT replies. Meet Pluma, our moth mascot.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/app.css">
   <script type="module" src="/app.js"></script>
-  <title>Duo Chat</title>
+  <title>Lobby</title>
 </head>
 <body>
   <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <symbol id="duo" viewBox="0 0 24 24"><path d="M4 5h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H7.3L4 17v-3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M17 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2v2.5L16.7 18H12a2 2 0 0 1-1.8-1.1"/></symbol>
+    <symbol id="lobby" viewBox="0 0 24 24"><path d="M10 10C4 4 1 10 4 16c1 3 4 3 6 0m4-6c6-6 9 0 6 6-1 3-4 3-6 0M10 7 8 4m6 3 2-3"/><rect x="10" y="7" width="4" height="12" rx="2"/></symbol>
     <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="join" viewBox="0 0 24 24"><path d="M12 5h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6M3 12h12m-4-4 4 4-4 4"/></symbol>
     <symbol id="home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 21v-7h6v7"/></symbol>
@@ -61,7 +61,7 @@
 
   <div class="navigation-chrome" id="sidebar">
     <nav class="room-rail" aria-label="Room shortcuts">
-      <button class="rail-button brand-mark selected" id="brand" title="Duo Chat home" aria-label="Duo Chat home"><svg class="icon"><use href="#duo"/></svg></button>
+      <button class="rail-button brand-mark selected" id="brand" title="Lobby home" aria-label="Lobby home"><svg class="icon"><use href="#lobby"/></svg></button>
       <button class="rail-button friends-rail" id="friends-rail" title="Friends &amp; DMs" aria-label="Friends and DMs"><svg class="icon"><use href="#people"/></svg><span id="social-count" class="social-count" hidden></span></button>
       <div class="rail-rule"></div>
       <div class="rail-rooms" id="room-shortcuts"></div>
@@ -69,7 +69,7 @@
       <button class="rail-button rail-help" id="help-button" title="How it works" aria-label="How it works"><svg class="icon"><use href="#help"/></svg></button>
     </nav>
     <aside class="sidebar">
-      <div class="sidebar-title"><span id="sidebar-title">Duo Chat</span><button class="icon-button sidebar-close" id="close-sidebar" aria-label="Close menu"><svg class="icon"><use href="#close"/></svg></button></div>
+      <div class="sidebar-title"><span id="sidebar-title">Lobby</span><button class="icon-button sidebar-close" id="close-sidebar" aria-label="Close menu"><svg class="icon"><use href="#close"/></svg></button></div>
       <button class="switcher-button" id="quick-switcher" aria-label="Quick switcher"><svg class="icon"><use href="#search"/></svg><span>Quick switcher</span><kbd>Ctrl K</kbd></button>
       <nav id="home-navigation" class="sidebar-menu" aria-label="Main navigation">
         <button id="home-button" class="nav-button selected" aria-current="page"><svg class="icon"><use href="#home"/></svg> Home</button>
@@ -155,12 +155,12 @@
     <main id="home-view" class="home-view">
       <section class="welcome">
         <div class="welcome-copy">
-          <div class="hero-label"><svg class="icon"><use href="#people"/></svg> Group chat with ChatGPT</div>
-          <h1>Chat and play<br><em>together.</em></h1>
-          <p>Get your friends in one room to play a game, share ideas, or ask ChatGPT a question together.</p>
+          <div class="hero-label"><svg class="icon"><use href="#people"/></svg> A place to gather</div>
+          <h1>Make room<br><em>for everyone.</em></h1>
+          <p>Bring your people together for games, music, and good conversations. Build a community, find your corner, and invite ChatGPT along when you need it.</p>
           <button class="button primary" id="hero-create"><svg class="icon"><use href="#plus"/></svg> Create a room</button>
         </div>
-        <img src="/hero.png" alt="" width="1448" height="1086" class="hero-image">
+        <figure class="mascot-figure"><img src="/pluma.png" alt="Pluma, Lobby’s purple moth mascot, waving with a glowing mint lantern." width="1254" height="1254" class="hero-image"><figcaption><strong>Pluma</strong><span>Keeping a light on for you.</span></figcaption></figure>
       </section>
       <section class="quick-section" aria-labelledby="quick-title">
         <h2 id="quick-title">Start with an idea</h2>
@@ -208,7 +208,7 @@
         <div class="message-stream" id="message-stream" role="log" aria-label="Messages">
           <button type="button" class="button subtle earlier-messages" id="earlier-messages" hidden>Earlier messages</button>
           <div id="room-empty" class="room-empty">
-            <div class="empty-icon"><svg class="icon"><use href="#duo"/></svg></div>
+            <div class="empty-icon"><svg class="icon"><use href="#lobby"/></svg></div>
             <h2 id="empty-title">Welcome to #general</h2>
             <p id="empty-hint">Invite your friends or try one of these starters.</p>
             <div class="starters" id="starters"></div>

@@ -252,7 +252,7 @@ function showRoomForm({ title, invite, joining = false } = {}) {
   handleForm(async data => {
     const name = data.get('name');
     const code = invite ?? inviteCode(data.get('invite'));
-    if (joining && !code) throw new Error('Paste a valid Duo Chat invite link.');
+    if (joining && !code) throw new Error('Paste a valid Lobby invite link.');
     const existing = joining && saved.rooms.find(room => room.invite === code);
     let room = existing || await api(joining ? '/join' : '/rooms', {
       input: joining ? { name, invite: code } : { name, title: data.get('title'), description: data.get('description') },
@@ -336,7 +336,7 @@ function applyOwnProfile(data) {
   if (selfProfile?.username) social.start();
 }
 
-const usernameField = `<label class="field">Username<input name="username" pattern="[A-Za-z0-9_]{3,24}" maxlength="24" placeholder="e.g. moonlight" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="username-help" required><small id="username-help">Choose 3–24 letters, numbers, or underscores. Duo Chat adds an available four-digit tag.</small></label>`;
+const usernameField = `<label class="field">Username<input name="username" pattern="[A-Za-z0-9_]{3,24}" maxlength="24" placeholder="e.g. moonlight" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="username-help" required><small id="username-help">Choose 3–24 letters, numbers, or underscores. Lobby adds an available four-digit tag.</small></label>`;
 
 function showUsernameSetup() {
   if (usernameSetup) return;
@@ -785,7 +785,7 @@ function applyRoomIdentity(room, identity) {
   saveStorage();
   if (session?.room.id === room.id) {
     $('room-title').textContent = `${room.title} · #${session.channel}`;
-    document.title = `#${session.channel} · ${room.title} · Duo Chat`;
+    document.title = `#${session.channel} · ${room.title} · Lobby`;
     renderNav();
   }
 }
@@ -960,7 +960,7 @@ function renderNav() {
   const shortcuts = $('room-shortcuts');
   list.replaceChildren();
   shortcuts.replaceChildren();
-  $('sidebar-title').textContent = active ? 'Rooms' : 'Duo Chat';
+  $('sidebar-title').textContent = active ? 'Rooms' : 'Lobby';
   $('brand').classList.toggle('selected', !active);
   $('home-navigation').hidden = Boolean(active);
   $('home-room-nav').hidden = Boolean(active);
@@ -1062,7 +1062,7 @@ function renderProfile() {
   detail.replaceChildren();
   if (admin) {
     detail.innerHTML = icon('shield');
-    detail.append('Duo Chat admin');
+    detail.append('Lobby admin');
   } else {
     detail.textContent = active ? (active.host ? 'Room host' : 'Room member') : 'My profile';
   }
@@ -1088,7 +1088,7 @@ function setPage(room) {
   $('room-board').classList.toggle('selected', roomBoard.isOpen);
   $('header-action').innerHTML = `${icon(room ? 'link' : 'join')}<span>${room ? 'Invite people' : 'Join a room'}</span>`;
   $('header-action').setAttribute('aria-label', room ? 'Invite people' : 'Join a room');
-  document.title = room ? `${roomBoard.isOpen ? 'Room board' : `#${session.channel}`} · ${room.title} · Duo Chat` : social.isOpen ? 'Friends & DMs · Duo Chat' : 'Duo Chat';
+  document.title = room ? `${roomBoard.isOpen ? 'Room board' : `#${session.channel}`} · ${room.title} · Lobby` : social.isOpen ? 'Friends & DMs · Lobby' : 'Lobby';
   renderNav();
   toggleSidebar(false);
 }
@@ -1239,7 +1239,7 @@ function renderMemberProfile(member) {
   const meta = element('div', 'member-popup-meta');
   meta.append(element('span', member.online ? 'member-presence online' : 'member-presence', member.online ? 'Online' : 'Away'));
   if (member.host) meta.append(element('span', 'member-role', 'Room host'));
-  if (isAdmin) meta.append(element('span', 'member-role', 'Duo Chat admin'));
+  if (isAdmin) meta.append(element('span', 'member-role', 'Lobby admin'));
   header.append(cover, picture, title);
   if (member.username) header.append(element('p', 'member-popup-username', member.username));
   header.append(meta);

@@ -1,6 +1,8 @@
-# Duo Chat
+# Lobby
 
 A group chat app with rooms, text and voice channels, profiles, friends, private DMs, moderation, events, shared checklists, polls, and optional shared ChatGPT replies.
+
+Lobby was previously called Duo Chat. Meet **Pluma**, our purple moth mascot with a mint lantern. The transparent artwork is in `src/pluma.png`; its creation notes and generation prompt are in [`docs/PLUMA.md`](docs/PLUMA.md). The app's Terms and Copyright pages use the new name and explain the AI-generated artwork.
 
 ## Current hosting
 
