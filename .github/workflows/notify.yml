@@ -1,0 +1,66 @@
+name: Notify collaborator
+
+# Posts a comment on the pull request that tags itzyagirlalessia with the changes,
+# whenever someone else opens a pull request, pushes to one, or merges one.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  notify:
+    if: >-
+      github.actor != 'itzyagirlalessia' &&
+      (github.event.action != 'closed' || github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Comment with changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          ACTION: ${{ github.event.action }}
+          ACTOR: ${{ github.actor }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          commit_line='"- `\(.sha[0:7])` \(.commit.message | split("\n")[0])"'
+          file_line='"- \(.status): `\(.filename)`"'
+          changelog_patch='select(.filename == "docs/CHANGELOG.md") | .patch // ""'
+
+          if [ "$ACTION" = "synchronize" ] && compare=$(gh api "repos/$REPO/compare/$BEFORE...$AFTER" 2>/dev/null); then
+            heading="New push"
+            commits=$(jq -r ".commits[] | $commit_line" <<<"$compare")
+            files=$(jq -r ".files[]? | $file_line" <<<"$compare")
+            changelog=$(jq -r ".files[]? | $changelog_patch" <<<"$compare" | grep -E '^\+- ' | sed 's/^+//' || true)
+          else
+            case "$ACTION" in
+              closed) heading="Merged into main" ;;
+              synchronize) heading="New push" ;;
+              *) heading="New pull request" ;;
+            esac
+            commits=$(gh api --paginate "repos/$REPO/pulls/$PR/commits" --jq ".[] | $commit_line")
+            files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq ".[] | $file_line")
+            changelog=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq ".[] | $changelog_patch" | grep -E '^\+- ' | sed 's/^+//' || true)
+          fi
+
+          file_count=$(grep -c . <<<"$files" || true)
+          files=$(head -n 30 <<<"$files")
+          if [ "$file_count" -gt 30 ]; then files+=$'\n'"- …and $((file_count - 30)) more"; fi
+
+          {
+            echo "@itzyagirlalessia **$heading** by \`$ACTOR\`: #$PR $TITLE"
+            if [ -n "$changelog" ]; then printf '\n**Changelog**\n%s\n' "$changelog"; fi
+            if [ -n "$commits" ]; then printf '\n**Commits**\n%s\n' "$commits"; fi
+            if [ -n "$files" ]; then printf '\n**Files changed**\n%s\n' "$files"; fi
+          } > comment.md
+
+          gh pr comment "$PR" --repo "$REPO" --body-file comment.md
+          echo "Posted comment on #$PR ($heading)."
