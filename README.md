@@ -10,7 +10,32 @@ This export contains source code, database migrations, and automated checks. It 
 
 ## Updates
 
-Completed app changes made through this Codex workspace are synced to this repository as part of the update. GitHub Actions runs the checks on each push. Live publication on the existing Sites host is a separate step; a GitHub push does not automatically deploy that host. Changes made outside the workspace are not automatically mirrored.
+GitHub `main` is the shared source for Codex, Claude, and other collaborators. Fetch the latest changes before editing, work on a feature branch when contributing in parallel, and merge reviewed pull requests into `main`. Codex pulls merged changes before the next update and pushes completed work back here. Shared instructions are in `AGENTS.md` and `CLAUDE.md`.
+
+In a normal GitHub clone:
+
+```sh
+git switch main
+git pull --ff-only
+git switch -c your-feature-name
+```
+
+Use this on a clean working tree. If you have local work, commit it on your branch and fetch/merge the latest changes without discarding it.
+
+The existing Sites checkout has a separate Git history. Its pull helper imports app source without merging the hosting repository's history:
+
+```sh
+node scripts/pull-github.mjs --check
+node scripts/pull-github.mjs --apply
+```
+
+The first command previews changes. The second applies them, saves copies of replaced files under ignored `.local/github-backups/`, and records the imported commit in `.local/github-sync.json`. Local edits to unchanged files stay in place. If both sides changed a file differently, the pull stops before applying any changes; resolve the conflict and retry. Private hosting configuration, environment files, generated output, and user data are excluded. The helper does not commit local work or move the Sites branch.
+
+Managed paths are `src/`, `scripts/`, `drizzle/`, `docs/`, `.github/`, and the root project files listed in the helper. New top-level source directories need review before adding them to this list. Symbolic links and case-only filename changes also require manual review so pulls work safely across Windows and Linux.
+
+The Sites workspace is already initialized. For a new separate checkout, initialize once with `node scripts/pull-github.mjs --initialize <full-sha-of-last-shared-commit>`. This must be the commit its local source was based on; choosing the current remote SHA without first comparing files can miss incoming changes. Normal GitHub clones should use Git's usual pull and branch commands instead.
+
+GitHub Actions checks each push and pull request. Pulling runs when the workspace is used or the command is run; there is no background watcher. Review and test incoming app changes before publishing. Live publication on the Sites host is separate, so a push or merge does not automatically update the live app.
 
 ## Build and check
 
@@ -19,6 +44,7 @@ Use Node.js 24 or newer. The project has no package dependencies to install.
 ```sh
 node scripts/build.mjs
 node scripts/verify.mjs
+node scripts/verify-github-sync.mjs
 ```
 
 The build writes a Cloudflare-compatible Worker module to `dist/server/index.js`. The verification script uses a disposable in-memory SQLite database and mocked external services; it does not contact real users or charge an AI account.

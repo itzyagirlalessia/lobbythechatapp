@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "node scripts/preview.mjs",
     "build": "node scripts/build.mjs",
-    "check": "node --check src/app.js && node --check src/worker.js"
+    "check": "node --check src/app.js && node --check src/worker.js",
+    "sync:github": "node scripts/pull-github.mjs --apply",
+    "check:sync": "node scripts/verify-github-sync.mjs"
   },
   "engines": { "node": ">=22" }
 }

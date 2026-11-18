@@ -24,3 +24,5 @@ jobs:
           for file in src/*.js scripts/*.mjs; do node --check "$file"; done
       - name: Verify chat features and access controls
         run: node scripts/verify.mjs
+      - name: Verify GitHub collaboration pulls
+        run: node scripts/verify-github-sync.mjs
