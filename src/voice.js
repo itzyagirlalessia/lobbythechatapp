@@ -151,7 +151,7 @@ export function createVoiceController(api, render, report) {
 
   async function join(room, channel, muted, stillOpen) {
     if (joining) return;
-    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error('Open Duo Chat in a browser tab with microphone support.');
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error('Open Lobby in a browser tab with microphone support.');
     joining = true;
     const generation = pageGeneration;
     const cancelled = () => generation !== pageGeneration || !stillOpen();

@@ -123,7 +123,7 @@ function personName(value) {
 
 function usernameBase(value) {
   const base = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (!usernamePattern.test(base)) throw new AppError(400, 'Use 3–24 letters, numbers, or underscores. Duo Chat adds your four-digit tag.');
+  if (!usernamePattern.test(base)) throw new AppError(400, 'Use 3–24 letters, numbers, or underscores. Lobby adds your four-digit tag.');
   return base;
 }
 
@@ -191,7 +191,7 @@ async function prunePictures(env, keys) {
         UNION ALL SELECT 1 FROM rooms WHERE icon_key = ? UNION ALL SELECT 1 FROM messages WHERE image_key = ? LIMIT 1`).bind(key, key, key, key).first();
       if (!used) await env.BUCKET.delete(key);
     } catch {
-      console.error('Duo Chat could not remove an unused picture.');
+      console.error('Lobby could not remove an unused picture.');
     }
   }
 }
@@ -466,7 +466,7 @@ function isAdmin(env, email, assignment) {
 }
 
 function requireModerator(member, admin) {
-  if (!member.is_host && !admin) throw new AppError(403, 'A room host or Duo Chat admin can do this.');
+  if (!member.is_host && !admin) throw new AppError(403, 'A room host or Lobby admin can do this.');
 }
 
 async function getChannel(db, roomId, name) {
@@ -1624,7 +1624,7 @@ export default {
         return await handleApi(request, env, ctx, url);
       } catch (error) {
         if (error instanceof AppError) return json({ error: error.message, code: error.code }, error.status);
-        console.error('Duo Chat request failed', error.name);
+        console.error('Lobby request failed', error.name);
         return json({ error: 'Something went wrong. Try again in a moment.' }, 500);
       }
     }

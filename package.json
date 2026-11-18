@@ -1,5 +1,5 @@
 {
-  "name": "duo-chat",
+  "name": "lobby",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -10,5 +10,7 @@
     "sync:github": "node scripts/pull-github.mjs --apply",
     "check:sync": "node scripts/verify-github-sync.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  }
 }
