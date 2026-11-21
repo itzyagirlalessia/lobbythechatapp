@@ -1,4 +1,5 @@
 import { formatContent } from './formatting.js';
+import { messageTime } from './message-time.js';
 
 export function createSocial(ui) {
   const $ = id => document.getElementById(id);
@@ -8,7 +9,6 @@ export function createSocial(ui) {
   let messages = [], canSend = false, earlier = false, reading = 0, notifySignature;
   const drafts = new Map();
   const failedRequests = new Map();
-  const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
   function action(label, operation, style = 'outline') {
     const button = el('button', `button ${style}`, label);
@@ -205,9 +205,7 @@ export function createSocial(ui) {
       row.dataset.messageId = message.id;
       const head = el('div', 'direct-message-head');
       const name = message.mine ? ui.getProfile()?.displayName || ui.getProfile()?.username : peer.name;
-      const time = el('time', '', date.format(message.created_at));
-      time.dateTime = new Date(message.created_at).toISOString();
-      head.append(el('strong', '', name), time);
+      head.append(el('strong', '', name), messageTime(message.created_at));
       if (message.edited_at && !message.deleted) head.append(el('small', '', 'edited'));
       const body = el('div', 'message-text');
       if (message.deleted) body.append(el('em', 'muted', 'Message deleted'));

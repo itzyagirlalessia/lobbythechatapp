@@ -10,6 +10,7 @@ import { applyRoomIdentity, organizeChannels, renderChannelDetails, showAiSettin
 import { renderVoiceChannels, renderVoiceDock, showVoiceChannelForm, showVoiceDetails } from './voice-ui.js';
 import { positionMemberCard, refreshActivity, renderPeople, showMemberProfile, showPeople, updateAi } from './people.js';
 import { refreshProfileListening } from './listening.js';
+import { syncMessageDates } from './message-time.js';
 import { appendMessages, imageDrafts, jumpLatest, nearLatest, readVisibleMessages, renderAttachment, replyDrafts, showAttachImage, showMessageEditor, showPollCreator, showReplyComposer, updateHistoryNote, updateMessageAuthors } from './messages.js';
 import { highlightMessage, refreshMentions, renderMentionBadge, showBookmarks, showHistoryResult, showMentions, showPins, showSearch } from './history.js';
 import { chooseMention, clearMentionSuggestions, selectMentionSuggestion, sendMessage, sendTyping, setDraft, showMentionSuggestions, showTyping, storeDraft, updateComposer } from './composer.js';
@@ -569,13 +570,18 @@ document.addEventListener('keydown', event => {
   } else if (event.key === '?' && !event.ctrlKey && !event.metaKey && !event.altKey
     && !event.target.closest('input, textarea, select, [contenteditable]')) showShortcuts();
 });
-document.addEventListener('visibilitychange', () => { if (!state.usernameSetup && !document.hidden && state.session) void refresh(state.session); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  syncMessageDates();
+  if (!state.usernameSetup && state.session) void refresh(state.session);
+});
 window.addEventListener('hashchange', () => { if (!state.usernameSetup) followSharedLink(); });
 window.addEventListener('resize', positionMemberCard);
 window.addEventListener('pagehide', voice.disconnect);
 window.addEventListener('pagehide', () => social.stop());
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 
+syncMessageDates();
 applyPreferences();
 void api('/profile').then(async data => {
   await loadAccountStorage(data.browserAccount, rooms => api('/profile/browser-rooms', { input: { rooms } }));
