@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { $, api, closeDialog, dialogForm, element, handleForm, icon, showDialog, toast } from './ui.js';
 import { refresh, voice } from './app.js';
+import { appendSidebarSpacer } from './room-settings.js';
 
 function voiceChannelName(name) {
   return name === 'lounge' ? 'Lounge' : name;
@@ -29,9 +30,11 @@ export function showVoiceChannelForm() {
 export function renderVoiceChannels() {
   const list = $('voice-channel-list');
   $('add-voice-channel').hidden = !state.session?.canManage;
+  $('voice-channel-spacing').hidden = !state.session?.canManage;
   const channels = state.session?.voiceChannels ?? [];
   const activeChannel = voice.active && voice.active.room === state.session?.room ? voice.active.channel : '';
-  const key = JSON.stringify([channels, activeChannel, state.session?.room.id]);
+  const spacers = state.session?.spacers;
+  const key = JSON.stringify([channels, activeChannel, state.session?.room.id, spacers]);
   if (list.dataset.key === key) return;
   const focused = list.contains(document.activeElement) ? document.activeElement.dataset.channel : null;
   list.dataset.key = key;
@@ -47,6 +50,7 @@ export function renderVoiceChannels() {
     const { room } = state.session;
     item.addEventListener('click', () => showJoinVoice(room, name));
     list.append(item);
+    appendSidebarSpacer(list, spacers?.['voice:' + name]);
     if (name === focused) item.focus();
   }
 }

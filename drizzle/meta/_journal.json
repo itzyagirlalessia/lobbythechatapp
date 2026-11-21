@@ -14,6 +14,7 @@
     { "idx": 9, "version": "6", "when": 1794872400000, "tag": "0009_room_board", "breakpoints": true },
     { "idx": 10, "version": "6", "when": 1794876000000, "tag": "0010_social", "breakpoints": true },
     { "idx": 11, "version": "6", "when": 1795219200000, "tag": "0011_spotify_listening", "breakpoints": true },
-    { "idx": 12, "version": "6", "when": 1795297700000, "tag": "0012_spotify_oauth_verifier", "breakpoints": true }
+    { "idx": 12, "version": "6", "when": 1795297700000, "tag": "0012_spotify_oauth_verifier", "breakpoints": true },
+    { "idx": 13, "version": "6", "when": 1795300800000, "tag": "0013_profile_studio_and_sidebar", "breakpoints": true }
   ]
 }

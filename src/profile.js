@@ -5,6 +5,7 @@ import { $, api, closeDialog, dialogForm, element, handleForm, icon, pictureImag
 import { syncAccountRooms } from './rooms.js';
 import { toggleSidebar } from './settings.js';
 import { refresh, restorePage, social } from './app.js';
+import { applyProfileDesign, bindProfileStudio, codeFields, designFields, profileFacts, renderProfileCode } from './profile-studio.js';
 
 export function applyOwnProfile(data) {
   state.admin = data.admin;
@@ -89,6 +90,7 @@ function profileDetailsEditor(form, details) {
       row.remove();
       add.disabled = false;
       add.focus();
+      form.dispatchEvent(new Event('input'));
     });
     list.append(row);
     add.disabled = list.childElementCount >= 5;
@@ -127,8 +129,27 @@ export async function showProfileEditor() {
       <button type="button" class="button outline" id="connect-spotify" hidden>Save and connect Spotify</button>
       <button type="button" class="button outline" id="disconnect-spotify" hidden>Disconnect Spotify</button>
     </div>` : '';
+  const tabs = [['basics', 'Profile'], ['style', 'Appearance'], ['code', 'HTML / CSS'], ['activity', 'Activity']];
   const fields = `
-    <div class="profile-preview profile-card"><div class="profile-cover" id="preview-cover"></div><span class="avatar" id="preview-avatar"></span><div><strong id="preview-name"></strong><small id="preview-username" hidden></small></div></div>
+    <div class="profile-studio">
+    <aside class="studio-preview" aria-label="Live profile preview">
+      <span class="studio-preview-label">Live preview</span>
+      <div class="studio-card" id="studio-card">
+        <header class="member-popup-header"><div class="profile-cover" id="preview-cover"></div>
+          <span class="avatar online" id="preview-avatar"></span>
+          <h3 class="member-popup-name" id="preview-name"></h3>
+          <p class="member-popup-username" id="preview-username" hidden></p>
+        </header>
+        <div class="member-popup-details" id="preview-details"><p class="member-bio" id="preview-bio" hidden></p>
+          <div id="preview-facts" hidden></div><div class="profile-code-container" id="preview-code" hidden></div>
+        </div>
+      </div>
+    </aside>
+    <div class="studio-settings">
+    <div class="studio-tabs" role="tablist" aria-label="Profile Studio">
+      ${tabs.map(([key, name], index) => `<button id="studio-tab-${key}" type="button" role="tab" aria-controls="studio-panel-${key}" aria-selected="${index === 0}">${name}</button>`).join('')}
+    </div>
+    <div class="studio-panel" id="studio-panel-basics" role="tabpanel" aria-labelledby="studio-tab-basics">
     <fieldset class="profile-section"><legend>Pictures</legend>
       ${pictureField('Profile picture', 'avatar', 'Cropped to a square')}
       ${pictureField('Profile banner', 'banner', 'Cropped to a wide image')}
@@ -143,6 +164,10 @@ export async function showProfileEditor() {
       <p class="profile-field-hint">Add up to five things you want room members to know.</p><div id="profile-details-edit"></div>
       <button type="button" class="button outline add-detail" id="add-profile-detail">${icon('plus')} Add detail</button>
     </fieldset>
+    </div>
+    <div class="studio-panel" id="studio-panel-style" role="tabpanel" aria-labelledby="studio-tab-style" hidden>${designFields()}</div>
+    <div class="studio-panel" id="studio-panel-code" role="tabpanel" aria-labelledby="studio-tab-code" hidden>${codeFields}</div>
+    <div class="studio-panel" id="studio-panel-activity" role="tabpanel" aria-labelledby="studio-tab-activity" hidden>
     <fieldset class="profile-section"><legend>Activity</legend>
       <div class="profile-grid">
         <label class="field">Playing<input name="game" maxlength="80" placeholder="e.g. Minecraft" autocomplete="off"></label>
@@ -159,8 +184,9 @@ export async function showProfileEditor() {
       <label class="field">Last.fm<input name="lastfm" maxlength="500" placeholder="Last.fm username or profile link" autocomplete="off"><small>${musicHint}</small></label>
       <label class="field">Spotify<input name="spotify" maxlength="500" placeholder="Spotify profile link" autocomplete="off"><small>Profile link</small></label>
     </fieldset>
-    <label class="profile-share"><input name="shareActivity" type="checkbox"><span><strong>Share activity and connected profiles</strong><small>People in your rooms can see your game, music and profile links. Enabled services can check your activity while you’re online in a room.</small></span></label>`;
-  showDialog('Edit your profile', dialogForm(fields, 'Save profile'));
+    <label class="profile-share"><input name="shareActivity" type="checkbox"><span><strong>Share activity and connected profiles</strong><small>People in your rooms can see your game, music and profile links. Enabled services can check your activity while you’re online in a room.</small></span></label>
+    </div></div></div>`;
+  showDialog('Profile Studio', dialogForm(fields, 'Save profile'));
   const form = $('dialog-body').querySelector('form');
   const originalUsername = state.selfProfile.username;
   const originalBase = originalUsername.split('#')[0];
@@ -174,22 +200,43 @@ export async function showProfileEditor() {
   }
   let avatarSource = state.selfProfile.avatar;
   let coverSource = state.selfProfile.banner;
+  const card = form.querySelector('#studio-card');
+  const avatarPreview = form.querySelector('#preview-avatar');
+  const coverPreview = form.querySelector('#preview-cover');
+  const bioPreview = form.querySelector('#preview-bio');
+  const factsPreview = form.querySelector('#preview-facts');
+  const codePreview = form.querySelector('#preview-code');
+  const readDetails = profileDetailsEditor(form, state.selfProfile.details);
+  const readDesign = bindProfileStudio(form, state.selfProfile.design);
+  let previousName, previousColor, previousAvatar, previousCover;
   const updatePreview = () => {
     const name = form.elements.displayName.value.trim() || 'Your profile';
-    updateAvatar(form.querySelector('#preview-avatar'), name, '', form.elements.color.value, avatarSource);
+    const color = form.elements.color.value;
+    if (name !== previousName || color !== previousColor || avatarSource !== previousAvatar) updateAvatar(avatarPreview, name, '', color, avatarSource);
+    if (color !== previousColor || coverSource !== previousCover) paintCover(coverPreview, color, coverSource);
+    previousName = name;
+    previousColor = color;
+    previousAvatar = avatarSource;
+    previousCover = coverSource;
     form.querySelector('#preview-name').textContent = name;
     const username = form.querySelector('#preview-username');
     const base = form.elements.username.value.trim().toLowerCase();
     username.textContent = base === originalBase ? originalUsername : base;
     username.hidden = !username.textContent;
+    bioPreview.textContent = form.elements.bio.value.trim();
+    bioPreview.hidden = !bioPreview.textContent;
+    const facts = profileFacts(readDetails());
+    factsPreview.replaceChildren(facts);
+    factsPreview.hidden = !facts.childElementCount;
+    const design = readDesign();
+    applyProfileDesign(card, design);
+    renderProfileCode(codePreview, design);
   };
-  const updateCover = () => paintCover(form.querySelector('#preview-cover'), form.elements.color.value, coverSource);
-  form.elements.displayName.addEventListener('input', updatePreview);
-  form.elements.username.addEventListener('input', updatePreview);
-  form.elements.color.addEventListener('change', () => { updatePreview(); updateCover(); });
+  form.addEventListener('input', updatePreview);
+  form.addEventListener('change', updatePreview);
   const readAvatar = bindPicture(form, 'avatar', avatarSource, [256, 256], 180_000, source => { avatarSource = source; updatePreview(); });
-  const readBanner = bindPicture(form, 'banner', coverSource, [1080, 360], 600_000, source => { coverSource = source; updateCover(); });
-  const readDetails = profileDetailsEditor(form, state.selfProfile.details);
+  const readBanner = bindPicture(form, 'banner', coverSource, [1080, 360], 600_000, source => { coverSource = source; updatePreview(); });
+  updatePreview();
   let connectRequested = false;
   const connectSpotify = form.querySelector('#connect-spotify');
   const disconnectSpotify = form.querySelector('#disconnect-spotify');
@@ -231,6 +278,7 @@ export async function showProfileEditor() {
     input.color = Number(input.color);
     input.shareActivity = values.has('shareActivity');
     input.details = readDetails();
+    input.design = readDesign();
     [input.avatarImage, input.bannerImage] = await Promise.all([readAvatar(), readBanner()]);
     applyOwnProfile(await api('/profile', { input }));
     if (connect) {

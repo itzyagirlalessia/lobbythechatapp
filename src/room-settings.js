@@ -7,6 +7,7 @@ import { accentOptions } from './profile.js';
 import { updateAi } from './people.js';
 import { showGallery, showPins } from './history.js';
 import { openRoom, refresh, renderChannels, renderNav, roomBoard } from './app.js';
+import { renderVoiceChannels } from './voice-ui.js';
 
 export function showChannelForm() {
   if (!state.session?.canManage) return;
@@ -137,6 +138,47 @@ export function organizeChannels() {
     if (form.isConnected) closeDialog();
     if (state.session?.room.id === room.id) void refresh(state.session);
     toast('Channel group saved.');
+  });
+}
+
+export function appendSidebarSpacer(container, style) {
+  if (!['small', 'large', 'divider'].includes(style)) return;
+  const spacer = element('div', 'room-sidebar-spacer ' + style);
+  spacer.setAttribute('aria-hidden', 'true');
+  container.append(spacer);
+}
+
+export function showSidebarSpacing(kind) {
+  const current = state.session;
+  if (!current?.canManage) return;
+  const { room } = current;
+  const voice = kind === 'voice';
+  const names = voice ? current.voiceChannels.map(channel => channel.name) : current.channels;
+  if (!names.length) return;
+  const fields = `<label class="field">Add space after<select name="channel"></select></label>
+    <label class="field">Spacing<select name="style"><option value="none">None</option><option value="small">Small gap</option>
+    <option value="large">Large gap</option><option value="divider">Divider line</option></select></label>`;
+  showDialog(voice ? 'Voice channel spacing' : 'Text channel spacing', dialogForm(fields, 'Save spacing', 'Everyone in this room sees these spacers.'));
+  const form = $('dialog-body').querySelector('form');
+  const channel = form.elements.channel;
+  const style = form.elements.style;
+  for (const name of names) channel.add(new Option(voice ? (name === 'lounge' ? 'Lounge' : name) : '#' + name, name));
+  if (!voice && names.includes(current.channel)) channel.value = current.channel;
+  const update = () => { style.value = current.spacers?.[kind + ':' + channel.value] || 'none'; };
+  channel.addEventListener('change', update);
+  update();
+  channel.focus();
+  handleForm(async data => {
+    const result = await api('/rooms/' + room.id + '/sidebar-spacer', {
+      access: room.access, input: { kind, name: data.get('channel'), style: data.get('style') },
+    });
+    if (state.session?.room.id === room.id) {
+      state.session.spacers = result.spacers;
+      renderChannels();
+      renderVoiceChannels();
+    }
+    if (form.isConnected) closeDialog();
+    toast('Sidebar spacing saved.');
   });
 }
 

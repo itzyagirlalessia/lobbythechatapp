@@ -27,9 +27,49 @@ export function applyPreferences() {
   const root = document.documentElement;
   root.classList.toggle('compact-messages', preferences.compact);
   root.classList.toggle('large-messages', preferences.largeText);
+  setSidebarWidth(preferences.sidebarWidth);
   $('composer-hint').textContent = preferences.enterSends
     ? 'Enter sends · Shift + Enter adds a line'
     : 'Enter adds a line · Ctrl or ⌘ + Enter sends';
+}
+
+function setSidebarWidth(value, persist = false) {
+  const width = Number.isFinite(value) ? Math.max(188, Math.min(352, Math.round(value))) : 224;
+  preferences.sidebarWidth = width;
+  document.documentElement.style.setProperty('--preferred-sidebar-width', width + 'px');
+  $('sidebar-resize').setAttribute('aria-valuenow', width);
+  $('sidebar-resize').setAttribute('aria-valuetext', width + ' pixels');
+  if (persist) {
+    saved.preferences = preferences;
+    saveStorage();
+  }
+}
+
+export function bindSidebarResize() {
+  const handle = $('sidebar-resize');
+  let drag;
+  handle.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    drag = { id: event.pointerId, x: event.clientX, width: preferences.sidebarWidth };
+    handle.setPointerCapture(event.pointerId);
+    handle.classList.add('dragging');
+  });
+  handle.addEventListener('pointermove', event => {
+    if (event.pointerId === drag?.id) setSidebarWidth(drag.width + event.clientX - drag.x);
+  });
+  handle.addEventListener('lostpointercapture', event => {
+    if (event.pointerId !== drag?.id) return;
+    drag = undefined;
+    handle.classList.remove('dragging');
+    setSidebarWidth(preferences.sidebarWidth, true);
+  });
+  handle.addEventListener('dblclick', () => setSidebarWidth(224, true));
+  handle.addEventListener('keydown', event => {
+    const width = { ArrowLeft: preferences.sidebarWidth - 12, ArrowRight: preferences.sidebarWidth + 12, Home: 188, End: 352 }[event.key];
+    if (!Number.isFinite(width)) return;
+    event.preventDefault();
+    setSidebarWidth(width, true);
+  });
 }
 
 export function showPreferences() {
@@ -40,13 +80,19 @@ export function showPreferences() {
     <label><span>Enter sends a message</span><input name="enterSends" type="checkbox"></label>
     <label><span>Desktop messages, requests, mentions and reminders</span><input name="desktopNotifications" type="checkbox"></label>
     <small>Notifications work while the app is open and require browser permission.</small>
-    </div>`, 'Save preferences', 'These preferences apply in this browser.'));
+    </div>
+    <label class="field">Sidebar width<input name="sidebarWidth" type="range" min="188" max="352" step="1"><output id="sidebar-width-value"></output></label>`, 'Save preferences', 'These preferences apply in this browser.'));
   const { elements } = $('dialog-body').querySelector('form');
-  for (const key of Object.keys(preferences)) if (elements.namedItem(key)) elements[key].checked = preferences[key];
+  for (const key of Object.keys(preferences)) if (elements.namedItem(key)?.type === 'checkbox') elements[key].checked = preferences[key];
+  elements.sidebarWidth.value = preferences.sidebarWidth;
+  const showWidth = () => { $('sidebar-width-value').value = elements.sidebarWidth.value + ' px'; };
+  elements.sidebarWidth.addEventListener('input', showWidth);
+  showWidth();
   handleForm(async data => {
     preferences.compact = data.has('compact');
     preferences.largeText = data.has('largeText');
     preferences.enterSends = data.has('enterSends');
+    preferences.sidebarWidth = Number(data.get('sidebarWidth'));
     const wantsNotifications = data.has('desktopNotifications');
     if (wantsNotifications && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
     preferences.desktopNotifications = Boolean(wantsNotifications && 'Notification' in window && Notification.permission === 'granted');

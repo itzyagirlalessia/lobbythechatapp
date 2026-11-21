@@ -146,6 +146,14 @@ await request(`${roomPath}/channels`, { name: 'trivia' }, null, 401, moderator);
 assert.equal((await request(`${roomPath}/channels`, { name: 'Trivia Club' }, blair.access, 201, moderator)).name, 'trivia-club');
 await request(`${roomPath}/channels`, { name: 'trivia-club' }, host.access, 409);
 assert.deepEqual((await request(roomPath, null, host.access)).channels, ['general', 'trivia-club']);
+const spacingPath = roomPath + '/sidebar-spacer';
+await request(spacingPath, { kind: 'voice', name: 'lounge', style: 'divider' }, blair.access, 403);
+await request(spacingPath, { kind: 'voice', name: 'unavailable', style: 'divider' }, host.access, 404);
+await request(spacingPath, { kind: 'voice', name: 'lounge', style: 'arbitrary' }, host.access, 400);
+assert.deepEqual(await request(spacingPath, { kind: 'voice', name: 'lounge', style: 'divider' }, host.access), { spacers: { 'voice:lounge': 'divider' } });
+assert.deepEqual(await request(spacingPath, { kind: 'text', name: 'general', style: 'large' }, host.access), { spacers: { 'voice:lounge': 'divider', 'text:general': 'large' } });
+assert.deepEqual((await request(roomPath, null, blair.access)).spacers, { 'voice:lounge': 'divider', 'text:general': 'large' });
+assert.deepEqual(await request(spacingPath, { kind: 'voice', name: 'lounge', style: 'none' }, host.access), { spacers: { 'text:general': 'large' } });
 
 const original = { id: randomUUID(), text: 'Welcome friends!' };
 const first = await request(`${roomPath}/messages`, original, host.access, 201);
@@ -362,6 +370,30 @@ await request('/api/profile', { ...profile, spotifyTrack: '' }, null, 200, plain
 assert.deepEqual(await request(listeningPath, null, host.access), { track: null });
 delete env.DUO_SPOTIFY_CLIENT_ID;
 delete env.DUO_SPOTIFY_REDIRECT_URI;
+
+const html = '<section class="card"><h2>Blair’s corner</h2></section>';
+const css = '.card { color: #faa; }';
+const style = { accent: '#9bd5ff', surface: '#242e42', avatar: 'circle', banner: 'none', layout: 'center', customEnabled: true, customHeight: 900, html, css };
+const ownDesign = (await request('/api/profile', { ...profile, design: style }, null, 200, plainBlair)).profile.design;
+assert.equal(ownDesign.avatar, 'circle');
+assert.equal(ownDesign.customHeight, 420);
+assert.equal(ownDesign.html, html);
+const designedPerson = (await request(roomPath, null, host.access)).members.find(person => person.id === blair.memberId);
+assert.equal(designedPerson.design.accent, style.accent);
+assert.equal(designedPerson.design.customEnabled, true);
+assert(!Object.hasOwn(designedPerson.design, 'html'));
+const profileCodePath = roomPath + '/profile-code?member=' + blair.memberId;
+await request(profileCodePath, null, null, 401);
+assert.deepEqual(await request(profileCodePath, null, host.access), { code: { html, css } });
+assert.deepEqual(await request('/api/rooms/' + otherRoom.id + '/profile-code?member=' + blair.memberId, null, otherRoom.access, 200, moderator), { code: null });
+const savedDraft = (await request('/api/profile', { ...profile, design: { ...style, customEnabled: false } }, null, 200, plainBlair)).profile.design;
+assert.equal(savedDraft.html, html);
+assert.deepEqual(await request(profileCodePath, null, host.access), { code: null });
+await request('/api/profile', { ...profile, design: null }, null, 200, plainBlair);
+const profileCanvas = await app.fetch(new Request('http://127.0.0.1/profile-canvas'), env, context);
+assert.equal(profileCanvas.status, 200);
+assert.match(profileCanvas.headers.get('Content-Security-Policy'), /default-src 'none'/);
+assert.match(profileCanvas.headers.get('Content-Security-Policy'), /form-action 'none'/);
 
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/a9xkAAAAASUVORK5CYII=';
 const details = [{ label: 'Interests', value: 'Puzzle games' }, { label: 'Languages', value: 'English and Dutch' }];

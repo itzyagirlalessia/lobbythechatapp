@@ -5,6 +5,7 @@ import { paintCover } from './profile.js';
 import { showAiSettings, showRoomBan } from './room-settings.js';
 import { social } from './app.js';
 import { listeningSlot, refreshProfileListening } from './listening.js';
+import { applyProfileDesign, profileFacts, renderProfileCode } from './profile-studio.js';
 
 let memberCardAnchorTop = 0;
 
@@ -58,6 +59,7 @@ function renderMemberProfile(member) {
   const signature = JSON.stringify([member, activities, isAdmin]);
   if (panel.dataset.profileSignature === signature) return;
   panel.dataset.profileSignature = signature;
+  applyProfileDesign($('member-card'), member.design);
   const header = element('div', 'member-popup-header');
   const cover = element('div', 'profile-cover');
   paintCover(cover, member.color ?? color(member.id), member.banner);
@@ -75,14 +77,19 @@ function renderMemberProfile(member) {
   const details = element('div', 'member-popup-details');
   if (member.status) details.append(element('p', 'profile-status', member.status));
   if (member.bio) details.append(element('p', 'member-bio', member.bio));
-  if (member.details?.length) {
-    const facts = element('dl', 'profile-facts');
-    for (const { label, value } of member.details) {
-      const fact = element('div');
-      fact.append(element('dt', '', label), element('dd', '', value));
-      facts.append(fact);
-    }
-    details.append(facts);
+  if (member.details?.length) details.append(profileFacts(member.details));
+  if (member.design?.customEnabled) {
+    const custom = element('div', 'profile-code-container');
+    custom.hidden = true;
+    details.append(custom);
+    const room = state.session?.room;
+    const path = room ? '/rooms/' + room.id + '/profile-code?member=' + encodeURIComponent(member.id)
+      : '/social/profile-code?username=' + encodeURIComponent(member.username);
+    void api(path, { access: room?.access }).then(({ code }) => {
+      if (!code || !custom.isConnected) return;
+      renderProfileCode(custom, { ...member.design, ...code });
+      positionMemberCard();
+    }).catch(() => {});
   }
   for (const activity of activities) {
     const row = element('div', 'member-activity');
