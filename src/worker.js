@@ -366,7 +366,8 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
       const connected = await env.DB.prepare('SELECT 1 FROM spotify_connections WHERE account_id = ? AND credentials IS NOT NULL').bind(id).first();
       profile.spotifyConnected = Boolean(connected);
     }
-    return { admin, signedIn: Boolean(id), profile, providers };
+    const browserAccount = id ? await hash('lobby-browser-account:' + id) : null;
+    return { admin, signedIn: Boolean(id), profile, providers, browserAccount };
   };
   let previous = id && await env.DB.prepare('SELECT * FROM profiles WHERE account_id = ?').bind(id).first();
   if (assigned && previous?.username !== assigned) previous = await assignReservedUsername(env.DB, id, assigned);
@@ -422,7 +423,7 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
 async function providerJson(base, params) {
   const url = new URL(base);
   url.search = new URLSearchParams(params);
-  const response = await fetch(url.href, { redirect: 'error', signal: AbortSignal.timeout(3500) });
+  const response = await fetch(url.href, { redirect: 'manual', signal: AbortSignal.timeout(3500) });
   if (!response.ok) {
     await response.body?.cancel();
     return null;
@@ -515,14 +516,18 @@ async function startSpotifyConnection(env, account, config) {
 
 async function spotifyToken(config, params, previousRefreshToken) {
   const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST', body: new URLSearchParams({ client_id: config.clientId, ...params }),
-    redirect: 'error', signal: AbortSignal.timeout(5000),
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: config.clientId, ...params }).toString(),
+    redirect: 'manual', signal: AbortSignal.timeout(5000),
   });
   const data = await response.json().catch(() => null);
   if (data?.error === 'invalid_grant') return null;
   if (!response.ok || !data || !Number.isFinite(data.expires_in) || data.expires_in <= 0 ||
       typeof data.access_token !== 'string' || !data.access_token ||
-      (data.scope && !data.scope.split(' ').includes(spotifyScope))) throw new Error('Spotify authorization failed.');
+      (data.scope && !data.scope.split(' ').includes(spotifyScope))) {
+    console.warn('Spotify token exchange returned an unusable response:', response.status);
+    throw new Error('Spotify authorization failed.');
+  }
   const refreshToken = data.refresh_token || previousRefreshToken;
   if (typeof refreshToken !== 'string' || !refreshToken) throw new Error('Spotify refresh token was not returned.');
   return { accessToken: data.access_token, refreshToken, expires: Date.now() + data.expires_in * 1000 };
@@ -530,7 +535,7 @@ async function spotifyToken(config, params, previousRefreshToken) {
 
 function readSpotifyPlayback(accessToken) {
   return fetch('https://api.spotify.com/v1/me/player', {
-    headers: { Authorization: 'Bearer ' + accessToken }, redirect: 'error', signal: AbortSignal.timeout(3500),
+    headers: { Authorization: 'Bearer ' + accessToken }, redirect: 'manual', signal: AbortSignal.timeout(3500),
   });
 }
 
@@ -548,19 +553,26 @@ async function finishSpotifyConnection(env, url, account, config) {
     WHERE account_id = ? AND pending_state = ? AND pending_until > ? AND pending_verifier = ? RETURNING account_id`)
     .bind(account, pending, Date.now(), attempt.pending_verifier).first();
   if (!claimed) return spotifyReturn('expired');
+  let stage = 'authorization code';
   try {
     const error = url.searchParams.get('error');
     const code = url.searchParams.get('code');
     if (error === 'access_denied') return spotifyReturn('declined');
     if (error || !code || code.length > 2048) return spotifyReturn('failed');
+    stage = 'token exchange';
     const verifier = await decryptKey(env, 'spotify-oauth:' + account + ':' + pending, attempt.pending_verifier);
     const data = await spotifyToken(config, { grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: config.redirectUri });
     if (!data) return spotifyReturn('expired');
+    stage = 'playback permission';
     const playback = await readSpotifyPlayback(data.accessToken);
-    await playback.body?.cancel();
+    await playback.body?.cancel().catch(() => {});
     if (playback.status === 403) return spotifyReturn('access');
     if (playback.status === 429) return spotifyReturn('busy');
-    if (!playback.ok) return spotifyReturn('failed');
+    if (!playback.ok) {
+      console.warn('Spotify playback access check failed:', playback.status);
+      return spotifyReturn('failed');
+    }
+    stage = 'saving connection';
     const credentials = await encryptKey(env, 'spotify:' + account, JSON.stringify(data));
     const saved = await env.DB.prepare(`UPDATE spotify_connections SET connection_id = ?, credentials = ?, refresh_until = 0,
       pending_state = NULL, pending_until = NULL
@@ -568,6 +580,7 @@ async function finishSpotifyConnection(env, url, account, config) {
       .bind(crypto.randomUUID(), credentials, account, pending, Date.now()).first();
     return spotifyReturn(saved ? 'connected' : 'expired');
   } catch {
+    console.warn('Spotify connection failed during:', stage);
     return spotifyReturn('failed');
   } finally {
     await env.DB.prepare('UPDATE spotify_connections SET pending_state = NULL, pending_until = NULL WHERE account_id = ? AND pending_state = ?')
@@ -1332,6 +1345,20 @@ async function accountRooms(db, account) {
   return { rooms: results.map(room => ({ id: room.id, ...roomIdentity(room), inviteVersion: room.invite_version, host: Boolean(room.host) })) };
 }
 
+async function verifyBrowserRooms(db, account, input) {
+  if (!Array.isArray(input.rooms) || input.rooms.length > 100) throw new AppError(400, 'Choose saved rooms to restore.');
+  const candidates = input.rooms.filter(room => idPattern.test(room?.id ?? '') && tokenPattern.test(room?.access ?? ''));
+  const pairs = await Promise.all(candidates.map(async room => [room.id, await hash(room.access)]));
+  if (!pairs.length) return { rooms: [] };
+  const { results } = await db.prepare(`SELECT DISTINCT m.room_id AS id FROM json_each(?) AS saved
+    JOIN members m ON m.room_id = json_extract(saved.value, '$[0]') AND m.token_hash = json_extract(saved.value, '$[1]')
+    WHERE m.account_id IS ? AND NOT EXISTS (
+      SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id
+        AND b.actor = CASE WHEN m.account_id IS NOT NULL THEN 'account:' || m.account_id ELSE 'member:' || m.id END
+    )`).bind(JSON.stringify(pairs), account).all();
+  return { rooms: results.map(room => room.id) };
+}
+
 async function restoreRoom(db, input, account) {
   if (!account) throw new AppError(401, 'Sign in to restore your rooms.');
   const roomId = typeof input.roomId === 'string' ? input.roomId : '';
@@ -1812,6 +1839,7 @@ async function handleApi(request, env, ctx, url) {
   const assigned = reservedUsernames.has(assignment?.username) ? assignment.username : null;
   if (url.pathname === '/api/profile' && (method === 'GET' || method === 'POST')) return json(await ownProfile(env, ctx, request, account, admin, assigned));
   if (url.pathname === '/api/profile/username' && method === 'POST') return json(await ownProfile(env, ctx, request, account, admin, assigned, true));
+  if (url.pathname === '/api/profile/browser-rooms' && method === 'POST') return json(await verifyBrowserRooms(env.DB, account, await body(request)));
   if (url.pathname === spotifyCallback && method === 'GET') return spotifyConnection(request, env, url, account);
   if (account) {
     const profile = await env.DB.prepare('SELECT username FROM profiles WHERE account_id = ?').bind(account).first();

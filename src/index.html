@@ -100,7 +100,10 @@
         <a href="/copyright">Copyright</a>
       </nav>
       <div class="voice-dock" id="voice-dock" hidden><button class="voice-dock-label" id="voice-status" aria-label="Open voice controls"><svg class="icon"><use href="#speaker"/></svg><span id="voice-dock-text"></span></button><div class="voice-dock-actions"><button class="icon-button" id="mute-voice" aria-label="Mute microphone" title="Mute microphone" aria-pressed="false"><svg class="icon"><use href="#mic"/></svg></button><button class="icon-button" id="deafen-voice" aria-label="Deafen" title="Deafen" aria-pressed="false"><svg class="icon"><use href="#headphones"/></svg></button><button class="icon-button" id="leave-voice" aria-label="Leave voice" title="Leave voice"><svg class="icon"><use href="#close"/></svg></button></div></div>
-      <button class="sidebar-profile" type="button" id="edit-profile" title="Edit your profile" aria-label="Edit your profile"><span class="avatar" id="profile-avatar" data-color="0">G</span><span class="profile-label"><strong id="profile-name">Guest</strong><small id="profile-detail">My profile</small></span><svg class="icon profile-edit-icon"><use href="#edit"/></svg></button>
+      <div class="sidebar-account">
+        <button class="sidebar-profile" type="button" id="edit-profile" title="Edit your profile" aria-label="Edit your profile"><span class="avatar" id="profile-avatar" data-color="0">G</span><span class="profile-label"><strong id="profile-name">Guest</strong><small id="profile-detail">My profile</small></span><svg class="icon profile-edit-icon"><use href="#edit"/></svg></button>
+        <button class="button subtle account-button" type="button" id="account-menu" aria-haspopup="dialog">Account</button>
+      </div>
     </aside>
   </div>
   <button id="sidebar-backdrop" class="sidebar-backdrop" aria-label="Close menu" hidden></button>

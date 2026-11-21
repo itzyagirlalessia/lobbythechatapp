@@ -41,6 +41,7 @@ let spotifyRefreshes = 0;
 
 globalThis.fetch = async (url, options) => {
   const requestUrl = new URL(url);
+  if (options.redirect === 'error') throw new TypeError('Worker fetch does not accept redirect mode error.');
   if (requestUrl.hostname === 'api.steampowered.com') {
     assert.equal(requestUrl.searchParams.get('key'), env.DUO_STEAM_API_KEY);
     assert.equal(requestUrl.searchParams.get('steamids'), '76561198000000000');
@@ -58,6 +59,8 @@ globalThis.fetch = async (url, options) => {
     return Response.json({ title: 'Paper Satellites', thumbnail_url: previewImage, html: '<script>ignored</script>' });
   }
   if (requestUrl.href === 'https://accounts.spotify.com/api/token') {
+    assert.equal(options.redirect, 'manual');
+    assert.equal(options.headers['Content-Type'], 'application/x-www-form-urlencoded');
     const params = new URLSearchParams(options.body);
     assert.equal(params.get('client_id'), env.DUO_SPOTIFY_CLIENT_ID);
     if (params.get('grant_type') === 'refresh_token') {
@@ -75,6 +78,7 @@ globalThis.fetch = async (url, options) => {
     return Response.json({ access_token: 'spotify-test-access', refresh_token: 'spotify-test-refresh', expires_in: spotifyPrivate ? 3600 : 1 });
   }
   if (requestUrl.href === 'https://api.spotify.com/v1/me/player') {
+    assert.equal(options.redirect, 'manual');
     assert.equal(options.headers.Authorization, 'Bearer spotify-test-access');
     if (spotifyPlaybackStatus !== 200) return new Response(null, { status: spotifyPlaybackStatus });
     return Response.json({ is_playing: true, device: { is_private_session: spotifyPrivate }, progress_ms: 45_000,
@@ -124,6 +128,15 @@ const [blair, cameron] = await Promise.all([
 identities.set(blair.access, plainBlair);
 const initial = await request(roomPath, null, blair.access);
 assert.deepEqual(initial.members.map(member => member.name), ['Alex', 'Blair', 'Cameron']);
+const browserRooms = '/api/profile/browser-rooms';
+assert.match(onboarded.browserAccount, /^[a-f0-9]{64}$/);
+assert.equal((await request('/api/profile', null, null, 200, moderator)).browserAccount, onboarded.browserAccount);
+const anotherBrowser = await request('/api/profile', null, null, 200, namedAccount('different-user'));
+assert.notEqual(anotherBrowser.browserAccount, onboarded.browserAccount);
+assert.deepEqual(await request(browserRooms, { rooms: [{ id: blair.id, access: blair.access }] }, null, 200, plainBlair), { rooms: [host.id] });
+assert.deepEqual(await request(browserRooms, { rooms: [{ id: blair.id, access: blair.access }] }, null, 200, namedAccount('different-user')), { rooms: [] });
+assert.deepEqual(await request(browserRooms, { rooms: [{ id: host.id, access: host.access }] }, null, 200, plainBlair), { rooms: [] });
+assert.deepEqual(await request(browserRooms, { rooms: [{ id: host.id, access: host.access }] }, null), { rooms: [host.id] });
 assert.deepEqual(initial.channels, ['general']);
 assert.equal(initial.canManage, false);
 assert.equal((await request('/api/profile', null, null, 200, moderator)).admin, true);
