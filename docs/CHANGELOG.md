@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-21
 
+- **[itzyagirlalessia]** Added local calendar date labels to room messages, DMs, and scheduled messages.
 - **[itzyagirlalessia]** Added Lobby sign-out and guided ChatGPT account switching, with rooms and drafts saved separately by account.
 - **[itzyagirlalessia]** Made Spotify sign-in and track requests compatible with Lobby’s hosting runtime.
 - **[itzyagirlalessia]** Fixed the Spotify sign-in return flow when browsers omit the connection cookie, and showed specific errors when Spotify denies access.

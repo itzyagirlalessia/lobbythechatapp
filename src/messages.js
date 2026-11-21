@@ -1,8 +1,9 @@
 // Rendering messages and their actions: replies, reactions, polls, images, edits, deletes, saved messages.
 import { bindPicture, pictureField } from './pictures.js';
 import { formatContent } from './formatting.js';
+import { messageTime } from './message-time.js';
 import { saveStorage, saved, state } from './state.js';
-import { $, api, avatar, clock, closeDialog, dialogForm, element, fullDate, handleForm, icon, pictureImage, showDialog, toast, updateAvatar } from './ui.js';
+import { $, api, avatar, closeDialog, dialogForm, element, handleForm, icon, pictureImage, showDialog, toast, updateAvatar } from './ui.js';
 import { roomMember, showMemberProfile } from './people.js';
 import { showHistoryResult } from './history.js';
 import { updateComposer } from './composer.js';
@@ -407,11 +408,7 @@ export function appendMessages(current, messages) {
       });
       byline.append(profile);
     } else byline.append(name);
-    const time = new Date(message.created_at);
-    const stamp = element('time', 'time', clock.format(time));
-    stamp.dateTime = time.toISOString();
-    stamp.title = fullDate.format(time);
-    byline.append(stamp);
+    byline.append(messageTime(message.created_at, 'time'));
     if (message.edited_at) byline.append(element('span', 'edited-mark', 'edited'));
     if (message.pinned_at && !message.hidden) byline.append(element('span', 'pinned-mark', 'Pinned'));
     const unavailable = message.hidden || message.deleted;

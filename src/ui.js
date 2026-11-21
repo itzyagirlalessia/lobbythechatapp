@@ -6,8 +6,6 @@ export function $(id) {
   return document.getElementById(id);
 }
 
-export const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
-export const fullDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' });
 export const narrowScreen = window.matchMedia('(max-width: 950px)');
 
 let toastTimer;

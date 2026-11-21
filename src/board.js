@@ -1,3 +1,5 @@
+import { messageTime } from './message-time.js';
+
 const eventDate = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const tabs = { overview: 'Overview', events: 'Events', tasks: 'Checklist', plans: 'My plans' };
 const kindNames = { event: 'Event', task: 'Task', announcement: 'Announcement' };
@@ -147,9 +149,12 @@ export function createRoomBoard(ui) {
     const content = element('div', 'board-card-content');
     const due = plan.due_at <= Date.now();
     const label = plan.kind === 'message' ? (plan.state === 'sent' ? 'Sent message' : 'Scheduled message') : (due ? 'Reminder due' : 'Reminder');
+    const stamp = element('p', 'board-card-meta');
+    if (plan.kind === 'message') stamp.append(messageTime(plan.due_at), ' · #' + plan.channel);
+    else stamp.textContent = eventDate.format(new Date(plan.due_at)) + ' · #' + plan.channel;
     content.append(element('small', `board-state${due && plan.kind === 'reminder' ? ' reminder-due' : ''}`, label),
       element('p', 'board-card-body', plan.text),
-      element('p', 'board-card-meta', `${eventDate.format(new Date(plan.due_at))} · #${plan.channel}`));
+      stamp);
     const tools = element('div', 'board-item-tools');
     if (plan.message_id) tools.append(action('Open message', 'reply', () => ui.showMessage(room, plan.channel, plan.message_id), 'button subtle'));
     const remove = action(plan.state === 'sent' || (due && plan.kind === 'reminder') ? 'Dismiss' : 'Cancel', 'close',
