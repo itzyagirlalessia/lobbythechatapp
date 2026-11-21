@@ -3,7 +3,7 @@ import { toast } from './ui.js';
 
 const legacyStorageKey = 'duo-chat-rooms-v1';
 let storageKey;
-const defaults = { compact: false, largeText: false, enterSends: true, desktopNotifications: false };
+const defaults = { compact: false, largeText: false, enterSends: true, desktopNotifications: false, sidebarWidth: 224 };
 
 export const saved = { rooms: [], active: null, name: '' };
 

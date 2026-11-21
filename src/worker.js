@@ -1,4 +1,5 @@
 import { assets } from './assets.js';
+import { normalizeProfileDesign, visibleProfileDesign, visibleProfileCode } from './profile-design.js';
 
 const encoder = new TextEncoder();
 const model = 'gpt-5.4-mini';
@@ -297,6 +298,7 @@ function profileData(entry) {
     spotifyTrack: entry?.spotify_track ? spotifyTrackUrl(entry.spotify_track) : '', spotifyArtist: entry?.spotify_artist || '',
     connections: connections(entry || {}), avatar: mediaUrl(entry?.avatar_key), banner: mediaUrl(entry?.banner_key),
     details: JSON.parse(entry?.details_json || '[]'),
+    design: entry?.design_json ? JSON.parse(entry.design_json) : null,
   };
 }
 
@@ -373,7 +375,7 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
   if (assigned && previous?.username !== assigned) previous = await assignReservedUsername(env.DB, id, assigned);
   if (request.method === 'GET') return profileResponse(previous);
   if (!id) throw new AppError(401, 'Sign in to edit your profile.');
-  const input = await body(request, usernameOnly ? 1024 : 2 * Math.ceil(gifLimit / 3) * 4 + 32_000);
+  const input = await body(request, usernameOnly ? 1024 : 2 * Math.ceil(gifLimit / 3) * 4 + 96_000);
   const wantsUsername = Object.hasOwn(input, 'username');
   if (usernameOnly && previous?.username) return profileResponse(previous);
   if (wantsUsername && reservedUsernames.has(previous?.username)) throw new AppError(409, 'This username is assigned to your account.');
@@ -396,24 +398,27 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
   const spotifyTrack = input.spotifyTrack === undefined ? previous?.spotify_track || '' : parseSpotifyTrack(input.spotifyTrack);
   const spotifyArtist = spotifyTrack ? optionalText(input.spotifyArtist ?? previous?.spotify_artist ?? '', 120, 'Track artist') : '';
   const details = input.details === undefined ? (previous?.details_json || '[]') : JSON.stringify(detailsList(input.details));
+  const design = input.design === undefined ? previous?.design_json ?? null
+    : input.design === null ? null : JSON.stringify(normalizeProfileDesign(input.design));
   const entry = await savePictures(env, ctx, [
     { name: 'avatar', input: input.avatarImage, old: previous?.avatar_key, limit: 180_000 },
     { name: 'banner', input: input.bannerImage, old: previous?.banner_key, limit: 600_000 },
   ], ({ avatar, banner }) => {
     const write = username => env.DB.prepare(`
-        INSERT INTO profiles (account_id, display_name, username, bio, color, game, music, steam, lastfm, spotify, share_activity, avatar_key, banner_key, details_json, spotify_track, spotify_artist)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET
+        INSERT INTO profiles (account_id, display_name, username, bio, color, game, music, steam, lastfm, spotify, share_activity, avatar_key, banner_key, details_json, spotify_track, spotify_artist, design_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET
           display_name = excluded.display_name, bio = excluded.bio, color = excluded.color,
           username = coalesce(excluded.username, profiles.username),
           game = excluded.game, music = excluded.music, steam = excluded.steam, lastfm = excluded.lastfm,
           spotify = excluded.spotify, share_activity = excluded.share_activity, details_json = excluded.details_json,
-          spotify_track = excluded.spotify_track, spotify_artist = excluded.spotify_artist,
+          spotify_track = excluded.spotify_track, spotify_artist = excluded.spotify_artist, design_json = excluded.design_json,
+          design_revision = profiles.design_revision + (profiles.design_json IS NOT excluded.design_json),
           avatar_key = excluded.avatar_key, banner_key = excluded.banner_key
         WHERE profiles.avatar_key IS ? AND profiles.banner_key IS ?
           AND (excluded.username IS NULL OR profiles.username IS ?)
         RETURNING *
       `).bind(id, displayName, username, bio, color, game, music, steam, lastfm, spotify, input.shareActivity === true ? 1 : 0,
-        avatar, banner, details, spotifyTrack || null, spotifyArtist || null,
+        avatar, banner, details, spotifyTrack || null, spotifyArtist || null, design,
         previous?.avatar_key ?? null, previous?.banner_key ?? null, previous?.username ?? null).first();
     return base && base !== previous?.username?.split('#')[0] ? withRandomTag(env.DB, base, write) : write(null);
   });
@@ -853,6 +858,20 @@ async function groupChannel(db, roomId, member, admin, input) {
     .bind(section, roomId, name).first();
   if (!entry) throw new AppError(404, 'Choose a custom text channel in this room.');
   return entry;
+}
+
+async function setSidebarSpacer(db, roomId, member, admin, input) {
+  requireModerator(member, admin);
+  const { kind, name, style } = input;
+  if (!['text', 'voice'].includes(kind) || typeof name !== 'string' || !channelPattern.test(name) || name.length > 30 ||
+      !['none', 'small', 'large', 'divider'].includes(style)) throw new AppError(400, 'Choose a channel and a spacing style.');
+  if (kind === 'voice') await voiceChannel(db, roomId, name);
+  else await getChannel(db, roomId, name);
+  const path = '$."' + kind + ':' + name + '"';
+  const entry = await (style === 'none'
+    ? db.prepare('UPDATE rooms SET sidebar_spacers_json = json_remove(sidebar_spacers_json, ?) WHERE id = ? RETURNING sidebar_spacers_json').bind(path, roomId)
+    : db.prepare('UPDATE rooms SET sidebar_spacers_json = json_set(sidebar_spacers_json, ?, ?) WHERE id = ? RETURNING sidebar_spacers_json').bind(path, style, roomId)).first();
+  return { spacers: JSON.parse(entry.sidebar_spacers_json) };
 }
 
 function roomIdentity(room) {
@@ -1385,7 +1404,7 @@ async function authenticate(db, request, roomId) {
   const account = accountId(request);
   // The ban check is part of this query so every room request needs one database round trip instead of two.
   const member = await db.prepare(`
-    SELECT m.id, m.name, m.is_host, m.last_seen, m.account_id, r.title, r.description, r.accent, r.icon_key,
+    SELECT m.id, m.name, m.is_host, m.last_seen, m.account_id, r.title, r.description, r.accent, r.icon_key, r.sidebar_spacers_json,
       r.ai_key, r.ai_until, r.ai_channel, r.moderation_version, r.invite_version,
       EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor =
         CASE WHEN coalesce(m.account_id, ?) IS NOT NULL THEN 'account:' || coalesce(m.account_id, ?) ELSE 'member:' || m.id END) AS banned
@@ -1444,7 +1463,26 @@ async function socialPeer(db, username, account) {
 }
 
 function publicPerson(entry) {
-  return { ...profileData(entry), name: entry.display_name || entry.username.split('#')[0] };
+  const profile = profileData(entry);
+  return { ...profile, design: visibleProfileDesign(profile.design, entry.design_revision), name: entry.display_name || entry.username.split('#')[0] };
+}
+
+async function socialProfileCode(db, account, username) {
+  const peer = await socialPeer(db, username, account);
+  const pair = accountPair(account, peer.account_id);
+  const visible = await db.prepare(`SELECT 1 FROM friendships WHERE first_account = ? AND second_account = ?
+    UNION ALL SELECT 1 FROM direct_threads WHERE first_account = ? AND second_account = ? LIMIT 1`).bind(...pair, ...pair).first();
+  if (!visible) throw new AppError(404, 'This profile is unavailable.');
+  return { code: visibleProfileCode(JSON.parse(peer.design_json || 'null')) };
+}
+
+async function roomProfileCode(db, roomId, memberId) {
+  if (!memberId || !idPattern.test(memberId)) throw new AppError(400, 'Choose a room member.');
+  const profile = await db.prepare(`SELECT p.design_json FROM members m JOIN profiles p ON p.account_id = m.account_id
+    WHERE m.room_id = ? AND m.id = ? AND NOT EXISTS (
+      SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor = 'account:' || m.account_id)`)
+    .bind(roomId, memberId).first();
+  return { code: visibleProfileCode(JSON.parse(profile?.design_json || 'null')) };
 }
 
 async function socialOverview(db, account) {
@@ -1574,6 +1612,7 @@ async function handleSocial(db, request, url, account) {
   if (!account) throw new AppError(401, 'Sign in and choose a username to use friends and DMs.');
   const path = url.pathname.slice('/api/social'.length);
   if (path === '' && request.method === 'GET') return json(await socialOverview(db, account));
+  if (path === '/profile-code' && request.method === 'GET') return json(await socialProfileCode(db, account, url.searchParams.get('username')));
   if (request.method === 'POST' && path === '/friends') return json(await requestFriend(db, account, await body(request)));
   if (request.method === 'POST' && path === '/friend-action') return json(await friendAction(db, account, await body(request)));
   if (request.method === 'POST' && path === '/direct') return json(await openDirect(db, account, await body(request)));
@@ -1596,7 +1635,8 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
   const [people, page, channels, voice] = await db.batch([
     db.prepare(`SELECT m.id, m.account_id, m.name, m.is_host, m.last_seen, m.typing_channel, m.typing_until, p.display_name, p.bio, p.color,
       p.game, p.music, p.share_activity, p.steam, p.lastfm, p.spotify, p.spotify_track, p.spotify_artist,
-      s.credentials IS NOT NULL AS spotify_connected, p.avatar_key, p.banner_key, p.details_json, p.username, p.status_text, p.status_until
+      s.credentials IS NOT NULL AS spotify_connected, p.avatar_key, p.banner_key, p.details_json,
+      json_remove(p.design_json, '$.html', '$.css') AS design_json, p.design_revision, p.username, p.status_text, p.status_until
       FROM members m LEFT JOIN profiles p ON p.account_id = m.account_id LEFT JOIN spotify_connections s ON s.account_id = p.account_id
       WHERE m.room_id = ? AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor = CASE WHEN m.account_id IS NOT NULL THEN 'account:' || m.account_id ELSE 'member:' || m.id END)
       ORDER BY m.is_host DESC, m.rowid`).bind(roomId),
@@ -1668,6 +1708,7 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
     channels: channels.results.map(entry => entry.name),
     voiceChannels: voice.results,
     sections: Object.fromEntries(channels.results.filter(entry => entry.section).map(entry => [entry.name, entry.section])),
+    spacers: JSON.parse(member.sidebar_spacers_json || '{}'),
     channelSettings: Object.fromEntries(channels.results.filter(entry => entry.topic || entry.slow_seconds)
       .map(entry => [entry.name, { topic: entry.topic, slowSeconds: entry.slow_seconds }])),
     latest: Object.fromEntries(channels.results.map(entry => [entry.name, entry.latest ?? 0])),
@@ -1683,6 +1724,7 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
       name: person.display_name || person.name, username: person.username || '', color: person.color, bio: person.bio || '',
       status: activeStatus(person, now),
       avatar: mediaUrl(person.avatar_key), banner: mediaUrl(person.banner_key), details: JSON.parse(person.details_json || '[]'),
+      design: person.design_json ? visibleProfileDesign(JSON.parse(person.design_json), person.design_revision) : null,
       host: Boolean(person.is_host), online: person.last_seen > now - onlineWindow,
       activity: person.share_activity ? {
         game: person.game, music: person.music, connections: connections(person),
@@ -1877,6 +1919,7 @@ async function handleApi(request, env, ctx, url) {
   }
   if (method === 'GET' && action === 'activity') return json(await roomActivity(env, roomId, url.searchParams.get('member')));
   if (method === 'GET' && action === 'listening') return json(await roomListening(env, url, roomId, url.searchParams.get('member')));
+  if (method === 'GET' && action === 'profile-code') return json(await roomProfileCode(env.DB, roomId, url.searchParams.get('member')));
   if (method === 'GET' && action === 'search') {
     const channel = url.searchParams.has('channel') ? await getChannel(env.DB, roomId, url.searchParams.get('channel')) : null;
     return json(await findMessages(env.DB, roomId, url.searchParams.get('q'), channel, url.searchParams.get('kind') ?? 'all'));
@@ -1898,6 +1941,7 @@ async function handleApi(request, env, ctx, url) {
   if (method === 'POST' && action === 'voice-signal') return json(await signalVoice(env.DB, roomId, member, await body(request)));
   if (method === 'POST' && action === 'leave-voice') return json(await leaveVoice(env.DB, roomId, member, await body(request)));
   if (method === 'POST' && action === 'channel-group') return json(await groupChannel(env.DB, roomId, member, admin, await body(request)));
+  if (method === 'POST' && action === 'sidebar-spacer') return json(await setSidebarSpacer(env.DB, roomId, member, admin, await body(request)));
   if (method === 'POST' && action === 'settings') return json(await updateRoom(env, ctx, request, roomId, member, admin));
   if (method === 'POST' && action === 'edit-message') return json(await editMessage(env.DB, roomId, member, await body(request)));
   if (method === 'POST' && action === 'delete-message') return json(await deleteMessage(env, ctx, roomId, member, await body(request)));
@@ -1916,6 +1960,12 @@ async function handleApi(request, env, ctx, url) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === '/profile-canvas' && request.method === 'GET') {
+      return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Custom profile section</title></head><body><main id="lobby-profile-content"></main></body></html>', {
+        headers: { ...security, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" },
+      });
+    }
     if (url.pathname.startsWith('/api/')) {
       try {
         return await handleApi(request, env, ctx, url);

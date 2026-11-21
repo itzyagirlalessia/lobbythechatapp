@@ -6,7 +6,7 @@ import { drafts, loadAccountStorage, preferences, saveStorage, saved, state } fr
 import { $, api, avatar, closeDialog, closeMemberCard, dialogForm, element, handleForm, icon, narrowScreen, notifyAttention, showDialog, toast } from './ui.js';
 import { inviteCode, removeInviteFragment, restoreAccess, showInvite, showRoomForm, syncAccountRooms } from './rooms.js';
 import { applyOwnProfile, renderProfile, showAccountMenu, showProfileEditor, showStatusForm, showUsernameSetup } from './profile.js';
-import { applyRoomIdentity, organizeChannels, renderChannelDetails, showAiSettings, showChannelDetails, showChannelForm, showRoomInfo, showRoomSettings } from './room-settings.js';
+import { appendSidebarSpacer, applyRoomIdentity, organizeChannels, renderChannelDetails, showAiSettings, showChannelDetails, showChannelForm, showRoomInfo, showRoomSettings, showSidebarSpacing } from './room-settings.js';
 import { renderVoiceChannels, renderVoiceDock, showVoiceChannelForm, showVoiceDetails } from './voice-ui.js';
 import { positionMemberCard, refreshActivity, renderPeople, showMemberProfile, showPeople, updateAi } from './people.js';
 import { refreshProfileListening } from './listening.js';
@@ -14,7 +14,7 @@ import { syncMessageDates } from './message-time.js';
 import { appendMessages, imageDrafts, jumpLatest, nearLatest, readVisibleMessages, renderAttachment, replyDrafts, showAttachImage, showMessageEditor, showPollCreator, showReplyComposer, updateHistoryNote, updateMessageAuthors } from './messages.js';
 import { highlightMessage, refreshMentions, renderMentionBadge, showBookmarks, showHistoryResult, showMentions, showPins, showSearch } from './history.js';
 import { chooseMention, clearMentionSuggestions, selectMentionSuggestion, sendMessage, sendTyping, setDraft, showMentionSuggestions, showTyping, storeDraft, updateComposer } from './composer.js';
-import { applyPreferences, showHelp, showPreferences, showShortcuts, showSwitcher, toggleSidebar } from './settings.js';
+import { applyPreferences, bindSidebarResize, showHelp, showPreferences, showShortcuts, showSwitcher, toggleSidebar } from './settings.js';
 
 export const voice = createVoiceController(api, renderVoiceDock, toast);
 export const roomBoard = createRoomBoard({
@@ -138,6 +138,7 @@ export function renderChannels() {
   if (!state.session) return;
   const { room, channel, channels, sections, canManage } = state.session;
   $('add-channel').hidden = !canManage;
+  $('text-channel-spacing').hidden = !canManage;
   $('organize-channels').hidden = !canManage || channels.length < 2;
   $('room-settings').hidden = !canManage;
   const favorites = channels.filter(name => room.favoriteChannels?.includes(name));
@@ -175,6 +176,7 @@ export function renderChannels() {
       }
       item.addEventListener('click', () => openRoom(room, name));
       block.append(item);
+      appendSidebarSpacer(block, state.session.spacers?.['text:' + name]);
     }
     list.append(block);
   }
@@ -236,6 +238,7 @@ export function openRoom(room, channel = room.lastChannel || 'general', through 
     channels: sameRoom ? state.session.channels : room.knownChannels ?? ['general'],
     voiceChannels: sameRoom ? state.session.voiceChannels : [{ name: 'lounge', people: 0 }],
     sections: sameRoom ? state.session.sections : {},
+    spacers: sameRoom ? state.session.spacers : {},
     channelSettings: sameRoom ? state.session.channelSettings : {},
     mentionUnread: sameRoom ? state.session.mentionUnread : 0,
     latest: sameRoom ? state.session.latest : {},
@@ -304,13 +307,15 @@ export async function refresh(current) {
     }
     const latest = data.latest ?? {};
     const refreshChannels = current.canManage !== data.canManage || current.channels.join(' ') !== data.channels.join(' ')
-      || JSON.stringify(current.sections) !== JSON.stringify(data.sections) || JSON.stringify(current.latest) !== JSON.stringify(latest);
+      || JSON.stringify(current.sections) !== JSON.stringify(data.sections) || JSON.stringify(current.latest) !== JSON.stringify(latest)
+      || JSON.stringify(current.spacers) !== JSON.stringify(data.spacers ?? {});
     current.canManage = data.canManage;
     current.channels = data.channels;
     current.voiceChannels = data.voiceChannels ?? [{ name: 'lounge', people: 0 }];
     current.channelSettings = data.channelSettings ?? {};
     renderChannelDetails();
     current.sections = data.sections;
+    current.spacers = data.spacers ?? {};
     current.latest = latest;
     if (JSON.stringify(current.room.knownChannels) !== JSON.stringify(data.channels)) {
       current.room.knownChannels = data.channels;
@@ -449,6 +454,8 @@ $('set-status').addEventListener('click', showStatusForm);
 $('preferences').addEventListener('click', showPreferences);
 $('shortcuts').addEventListener('click', showShortcuts);
 $('organize-channels').addEventListener('click', organizeChannels);
+$('text-channel-spacing').addEventListener('click', () => showSidebarSpacing('text'));
+$('voice-channel-spacing').addEventListener('click', () => showSidebarSpacing('voice'));
 $('room-info').addEventListener('click', showRoomInfo);
 $('room-board').addEventListener('click', () => showRoomBoard());
 $('schedule-message').addEventListener('click', () => roomBoard.planForm('message'));
@@ -582,6 +589,7 @@ window.addEventListener('pagehide', () => social.stop());
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 
 syncMessageDates();
+bindSidebarResize();
 applyPreferences();
 void api('/profile').then(async data => {
   await loadAccountStorage(data.browserAccount, rooms => api('/profile/browser-rooms', { input: { rooms } }));
