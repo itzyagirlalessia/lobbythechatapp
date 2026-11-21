@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { openLocalDatabase } from './local-db.mjs';
 import './build.mjs';
@@ -34,6 +34,8 @@ const songUrl = 'https://open.spotify.com/track/0123456789TestTrackABC';
 const songImage = 'https://i.scdn.co/image/testcover';
 const previewImage = 'https://image-cdn-ak.spotifycdn.com/image/testcover';
 let spotifyPrivate = true;
+let spotifyPlaybackStatus = 200;
+let spotifyChallenge;
 let spotifyTokenCalls = 0;
 let spotifyRefreshes = 0;
 
@@ -67,11 +69,14 @@ globalThis.fetch = async (url, options) => {
     assert.equal(params.get('grant_type'), 'authorization_code');
     assert.equal(params.get('code'), 'spotify-test-code');
     assert.equal(params.get('redirect_uri'), env.DUO_SPOTIFY_REDIRECT_URI);
-    assert.match(params.get('code_verifier'), /^[a-f0-9]{96}$/);
+    const verifier = params.get('code_verifier');
+    assert.match(verifier, /^[a-f0-9]{96}$/);
+    assert.equal(createHash('sha256').update(verifier).digest('base64url'), spotifyChallenge);
     return Response.json({ access_token: 'spotify-test-access', refresh_token: 'spotify-test-refresh', expires_in: spotifyPrivate ? 3600 : 1 });
   }
   if (requestUrl.href === 'https://api.spotify.com/v1/me/player') {
     assert.equal(options.headers.Authorization, 'Bearer spotify-test-access');
+    if (spotifyPlaybackStatus !== 200) return new Response(null, { status: spotifyPlaybackStatus });
     return Response.json({ is_playing: true, device: { is_private_session: spotifyPrivate }, progress_ms: 45_000,
       item: { type: 'track', id: songUrl.split('/').at(-1), name: 'Paper Satellites', duration_ms: 180_000,
         artists: [{ name: 'Night Signal' }], album: { images: [{ width: 300, url: songImage }] } } });
@@ -280,38 +285,45 @@ const spotifyOrigin = 'https://lobby.example.test';
 const spotifyPath = '/api/profile/spotify/';
 env.DUO_SPOTIFY_REDIRECT_URI = spotifyOrigin + spotifyPath + 'callback';
 env.DUO_SPOTIFY_CLIENT_ID = '0123456789abcdef0123456789abcdef';
-function spotifyRequest(path, { identity = plainBlair, access, input, cookie } = {}) {
+function spotifyRequest(path, { identity = plainBlair, access, input } = {}) {
   const headers = new Headers(identity);
   if (access) headers.set('Authorization', 'Bearer ' + access);
   if (input) headers.set('Content-Type', 'application/json');
-  if (cookie) headers.set('Cookie', cookie);
   return app.fetch(new Request(spotifyOrigin + path, {
     method: input ? 'POST' : 'GET', headers, body: input ? JSON.stringify(input) : undefined,
   }), env, context);
 }
 
-async function connectSpotify(checkState = false) {
+async function connectSpotify({ checkState = false, result = 'connected' } = {}) {
   const start = await spotifyRequest(spotifyPath + 'connect', { input: {} });
   assert.equal(start.status, 200);
-  const cookie = start.headers.get('Set-Cookie');
-  assert.match(cookie, /HttpOnly; Secure; SameSite=Lax/);
   const { url } = await start.json();
   const authorize = new URL(url);
   assert.equal(authorize.origin, 'https://accounts.spotify.com');
   assert.equal(authorize.searchParams.get('scope'), 'user-read-playback-state');
   assert.equal(authorize.searchParams.get('code_challenge_method'), 'S256');
+  spotifyChallenge = authorize.searchParams.get('code_challenge');
   const callback = spotifyPath + 'callback?code=spotify-test-code&state=' + authorize.searchParams.get('state');
   if (checkState) {
-    assert.equal((await spotifyRequest(callback, { cookie, identity: namedAccount('different-user') })).headers.get('Location'), '/?spotify=failed');
-    assert.equal((await spotifyRequest(callback)).headers.get('Location'), '/?spotify=failed');
-    assert.equal(spotifyTokenCalls, 0);
+    const tokenCalls = spotifyTokenCalls;
+    assert.equal((await spotifyRequest(callback, { identity: {} })).headers.get('Location'), '/?spotify=session');
+    assert.equal((await spotifyRequest(callback, { identity: namedAccount('different-user') })).headers.get('Location'), '/?spotify=expired');
+    assert.equal((await spotifyRequest(spotifyPath + 'callback?code=spotify-test-code&state=' + 'a'.repeat(48))).headers.get('Location'), '/?spotify=expired');
+    assert.equal(spotifyTokenCalls, tokenCalls);
   }
-  assert.equal((await spotifyRequest(callback, { cookie })).headers.get('Location'), '/?spotify=connected');
-  assert.equal((await spotifyRequest(callback, { cookie })).headers.get('Location'), '/?spotify=failed');
+  const tokenCalls = spotifyTokenCalls;
+  const returns = await Promise.all([spotifyRequest(callback), spotifyRequest(callback)]);
+  assert.deepEqual(returns.map(response => response.headers.get('Location')).sort(), ['/?spotify=' + result, '/?spotify=expired'].sort());
+  assert.equal(spotifyTokenCalls, tokenCalls + 1);
 }
 
 assert.equal((await spotifyRequest(spotifyPath + 'connect', { input: {}, identity: {} })).status, 401);
-await connectSpotify(true);
+spotifyPlaybackStatus = 403;
+await connectSpotify({ checkState: true, result: 'access' });
+assert.equal((await (await spotifyRequest('/api/profile')).json()).profile.spotifyConnected, false);
+spotifyPlaybackStatus = 204;
+await connectSpotify();
+spotifyPlaybackStatus = 200;
 const viewing = { access: host.access, identity: {} };
 assert.deepEqual(await (await spotifyRequest(listeningPath, viewing)).json(), { track: manualTrack });
 const disconnect = () => spotifyRequest(spotifyPath + 'disconnect', { input: {} });

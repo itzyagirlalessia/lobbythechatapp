@@ -579,12 +579,20 @@ void api('/profile').then(data => {
   applyOwnProfile(data);
   const url = new URL(location.href);
   const spotify = url.searchParams.get('spotify');
-  if (['connected', 'declined', 'failed'].includes(spotify)) {
+  const spotifyMessages = {
+    connected: 'Spotify connected. Your live track can now appear in room profiles.',
+    declined: 'Spotify connection cancelled.',
+    session: 'Sign back into Lobby and connect Spotify again.',
+    setup: 'Live Spotify sharing is unavailable on this Lobby address.',
+    expired: 'This Spotify connection expired. Start again from Edit your profile.',
+    access: 'Spotify denied playback access. Check that your Spotify account is listed under Users and Access in the Spotify Developer Dashboard.',
+    busy: 'Spotify is limiting requests right now. Try connecting again in a moment.',
+    failed: 'Spotify couldn’t finish the connection. Start again from Edit your profile.',
+  };
+  if (Object.hasOwn(spotifyMessages, spotify)) {
     url.searchParams.delete('spotify');
     history.replaceState(history.state, '', url);
-    const message = { connected: 'Spotify connected. Your live track can now appear in room profiles.',
-      declined: 'Spotify connection cancelled.', failed: 'Couldn’t connect Spotify. Check your access and try again.' };
-    toast(message[spotify]);
+    toast(spotifyMessages[spotify]);
   }
   if (data.signedIn && !data.profile.username) showUsernameSetup();
   else {

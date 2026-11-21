@@ -26,7 +26,6 @@ const activityCache = new Map();
 const spotifyTrackId = /^[a-zA-Z0-9]{22}$/;
 const spotifyCallback = '/api/profile/spotify/callback';
 const spotifyScope = 'user-read-playback-state';
-const spotifyCookie = '__Host-lobby-spotify';
 let spotifyRetryAt = 0;
 const security = {
   'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; img-src 'self' data: https://i.scdn.co https://image-cdn-ak.spotifycdn.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com",
@@ -491,13 +490,10 @@ function spotifyConfig(env, url) {
   return { clientId, redirectUri };
 }
 
-function spotifySessionCookie(value, seconds) {
-  return spotifyCookie + '=' + value + '; Path=/; Max-Age=' + seconds + '; HttpOnly; Secure; SameSite=Lax';
-}
-
 function spotifyReturn(result) {
+  console.info('Spotify connection result:', result);
   return new Response(null, { status: 303, headers: { ...security, Location: '/?spotify=' + result,
-    'Set-Cookie': spotifySessionCookie('', 0), 'Cache-Control': 'no-store' } });
+    'Cache-Control': 'no-store' } });
 }
 
 async function startSpotifyConnection(env, account, config) {
@@ -505,15 +501,16 @@ async function startSpotifyConnection(env, account, config) {
   const verifier = token() + token();
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(verifier)));
   const challenge = btoa(String.fromCharCode(...digest)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
-  await env.DB.prepare(`INSERT INTO spotify_connections (account_id, pending_state, pending_until) VALUES (?, ?, ?)
-    ON CONFLICT(account_id) DO UPDATE SET pending_state = excluded.pending_state, pending_until = excluded.pending_until`)
-    .bind(account, await hash(state), Date.now() + 600_000).run();
+  const pending = await hash(state);
+  const encrypted = await encryptKey(env, 'spotify-oauth:' + account + ':' + pending, verifier);
+  await env.DB.prepare(`INSERT INTO spotify_connections (account_id, pending_state, pending_until, pending_verifier) VALUES (?, ?, ?, ?)
+    ON CONFLICT(account_id) DO UPDATE SET pending_state = excluded.pending_state, pending_until = excluded.pending_until,
+      pending_verifier = excluded.pending_verifier`)
+    .bind(account, pending, Date.now() + 600_000, encrypted).run();
   const url = new URL('https://accounts.spotify.com/authorize');
   url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri,
     response_type: 'code', scope: spotifyScope, state, code_challenge: challenge, code_challenge_method: 'S256' });
-  const response = json({ url: url.href });
-  response.headers.set('Set-Cookie', spotifySessionCookie(state + '.' + verifier, 600));
-  return response;
+  return json({ url: url.href });
 }
 
 async function spotifyToken(config, params, previousRefreshToken) {
@@ -531,48 +528,62 @@ async function spotifyToken(config, params, previousRefreshToken) {
   return { accessToken: data.access_token, refreshToken, expires: Date.now() + data.expires_in * 1000 };
 }
 
-async function finishSpotifyConnection(request, env, url, account, config) {
-  if (!account || !config) return spotifyReturn('failed');
-  const cookie = request.headers.get('Cookie')?.match(/(?:^|;\s*)__Host-lobby-spotify=([a-f0-9]{48})\.([a-f0-9]{96})(?:;|$)/);
+function readSpotifyPlayback(accessToken) {
+  return fetch('https://api.spotify.com/v1/me/player', {
+    headers: { Authorization: 'Bearer ' + accessToken }, redirect: 'error', signal: AbortSignal.timeout(3500),
+  });
+}
+
+async function finishSpotifyConnection(env, url, account, config) {
+  if (!account) return spotifyReturn('session');
+  if (!config) return spotifyReturn('setup');
   const state = url.searchParams.get('state');
-  if (!cookie || state !== cookie[1]) return spotifyReturn('failed');
+  if (!tokenPattern.test(state ?? '')) return spotifyReturn('expired');
   const pending = await hash(state);
-  const attempt = await env.DB.prepare('SELECT 1 FROM spotify_connections WHERE account_id = ? AND pending_state = ? AND pending_until > ?')
+  const attempt = await env.DB.prepare('SELECT pending_verifier FROM spotify_connections WHERE account_id = ? AND pending_state = ? AND pending_until > ?')
     .bind(account, pending, Date.now()).first();
-  if (!attempt) return spotifyReturn('failed');
-  const code = url.searchParams.get('code');
-  let result = 'declined';
-  if (code && code.length <= 1024 && !url.searchParams.has('error')) {
-    try {
-      const data = await spotifyToken(config, { grant_type: 'authorization_code', code, code_verifier: cookie[2], redirect_uri: config.redirectUri });
-      if (data) {
-        const credentials = await encryptKey(env, 'spotify:' + account, JSON.stringify(data));
-        const saved = await env.DB.prepare(`UPDATE spotify_connections SET connection_id = ?, credentials = ?, refresh_until = 0, pending_state = NULL, pending_until = NULL
-          WHERE account_id = ? AND pending_state = ? AND pending_until > ? RETURNING connection_id`)
-          .bind(crypto.randomUUID(), credentials, account, pending, Date.now()).first();
-        if (saved) return spotifyReturn('connected');
-      }
-    } catch {
-      // Keep any existing connection if the new authorization fails.
-    }
-    result = 'failed';
+  if (!attempt?.pending_verifier) return spotifyReturn('expired');
+  // Claim the attempt once. Disconnecting or starting a new attempt also invalidates it.
+  const claimed = await env.DB.prepare(`UPDATE spotify_connections SET pending_verifier = NULL
+    WHERE account_id = ? AND pending_state = ? AND pending_until > ? AND pending_verifier = ? RETURNING account_id`)
+    .bind(account, pending, Date.now(), attempt.pending_verifier).first();
+  if (!claimed) return spotifyReturn('expired');
+  try {
+    const error = url.searchParams.get('error');
+    const code = url.searchParams.get('code');
+    if (error === 'access_denied') return spotifyReturn('declined');
+    if (error || !code || code.length > 2048) return spotifyReturn('failed');
+    const verifier = await decryptKey(env, 'spotify-oauth:' + account + ':' + pending, attempt.pending_verifier);
+    const data = await spotifyToken(config, { grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: config.redirectUri });
+    if (!data) return spotifyReturn('expired');
+    const playback = await readSpotifyPlayback(data.accessToken);
+    await playback.body?.cancel();
+    if (playback.status === 403) return spotifyReturn('access');
+    if (playback.status === 429) return spotifyReturn('busy');
+    if (!playback.ok) return spotifyReturn('failed');
+    const credentials = await encryptKey(env, 'spotify:' + account, JSON.stringify(data));
+    const saved = await env.DB.prepare(`UPDATE spotify_connections SET connection_id = ?, credentials = ?, refresh_until = 0,
+      pending_state = NULL, pending_until = NULL
+      WHERE account_id = ? AND pending_state = ? AND pending_until > ? RETURNING connection_id`)
+      .bind(crypto.randomUUID(), credentials, account, pending, Date.now()).first();
+    return spotifyReturn(saved ? 'connected' : 'expired');
+  } catch {
+    return spotifyReturn('failed');
+  } finally {
+    await env.DB.prepare('UPDATE spotify_connections SET pending_state = NULL, pending_until = NULL WHERE account_id = ? AND pending_state = ?')
+      .bind(account, pending).run().catch(() => console.warn('Spotify connection attempt cleanup failed.'));
   }
-  await env.DB.prepare('UPDATE spotify_connections SET pending_state = NULL, pending_until = NULL WHERE account_id = ? AND pending_state = ?')
-    .bind(account, pending).run();
-  return spotifyReturn(result);
 }
 
 async function spotifyConnection(request, env, url, account) {
   const config = spotifyConfig(env, url);
-  if (request.method === 'GET' && url.pathname === spotifyCallback) return finishSpotifyConnection(request, env, url, account, config);
+  if (request.method === 'GET' && url.pathname === spotifyCallback) return finishSpotifyConnection(env, url, account, config);
   if (!account) throw new AppError(401, 'Sign in to connect Spotify.');
   if (request.method === 'POST') {
     await body(request, 1024);
     if (url.pathname === '/api/profile/spotify/disconnect') {
       await env.DB.prepare('DELETE FROM spotify_connections WHERE account_id = ?').bind(account).run();
-      const response = json({ connected: false });
-      response.headers.set('Set-Cookie', spotifySessionCookie('', 0));
-      return response;
+      return json({ connected: false });
     }
     if (url.pathname === '/api/profile/spotify/connect') {
       if (!config) throw new AppError(503, 'Live Spotify sharing isn’t configured for this site.');
@@ -586,10 +597,7 @@ async function spotifyPlayback(env, config, entry) {
   if (Date.now() < spotifyRetryAt) return null;
   const key = 'spotify:' + entry.account_id;
   let credentials = JSON.parse(await decryptKey(env, key, entry.credentials));
-  const readPlayback = accessToken => fetch('https://api.spotify.com/v1/me/player', {
-    headers: { Authorization: 'Bearer ' + accessToken }, redirect: 'error', signal: AbortSignal.timeout(3500),
-  });
-  let response = credentials.expires > Date.now() + 30_000 ? await readPlayback(credentials.accessToken) : null;
+  let response = credentials.expires > Date.now() + 30_000 ? await readSpotifyPlayback(credentials.accessToken) : null;
   if (!response || response.status === 401) {
     await response?.body?.cancel();
     const now = Date.now();
@@ -610,7 +618,7 @@ async function spotifyPlayback(env, config, entry) {
         .bind(entry.account_id, entry.connection_id, lease).run();
       throw error;
     }
-    response = await readPlayback(credentials.accessToken);
+    response = await readSpotifyPlayback(credentials.accessToken);
   }
   if (!response.ok || response.status === 204) {
     if (response.status === 429) {

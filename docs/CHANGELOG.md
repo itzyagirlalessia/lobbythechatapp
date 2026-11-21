@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-21
 
+- **[itzyagirlalessia]** Fixed the Spotify sign-in return flow when browsers omit the connection cookie, and showed specific errors when Spotify denies access.
 - **[itzyagirlalessia]** Added a Spotify listening card to room profiles, with shared tracks and optional live playback progress.
 
 ## 2026-11-18
