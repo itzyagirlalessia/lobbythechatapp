@@ -8,10 +8,42 @@ import { refresh, restorePage, social } from './app.js';
 
 export function applyOwnProfile(data) {
   state.admin = data.admin;
+  state.signedIn = data.signedIn;
   state.selfProfile = data.profile;
   state.providers = data.providers;
   renderProfile();
   if (state.selfProfile?.username) social.start();
+}
+
+const signInPath = '/signin-with-chatgpt?return_to=%2F';
+const signOutPath = '/signout-with-chatgpt?return_to=%2F';
+
+export function showAccountMenu() {
+  toggleSidebar(false);
+  if (!state.signedIn) {
+    showDialog('Account', `<div class="account-actions"><a class="button primary" href="${signInPath}" target="_top">Sign in with ChatGPT</a></div>`);
+    return;
+  }
+  showDialog('Account', `<div id="account-identity" class="account-identity"></div>
+    <div class="account-actions">
+      <button class="button primary" type="button" id="change-account">Change account</button>
+      <a class="button outline" href="${signOutPath}" target="_top">Sign out of Lobby</a>
+    </div>`);
+  const profile = state.selfProfile;
+  const name = profile?.displayName || profile?.username || 'Signed in';
+  const picture = element('span', 'avatar');
+  updateAvatar(picture, name, '', profile?.color, profile?.avatar);
+  const labels = element('div');
+  labels.append(element('strong', '', name));
+  if (profile?.username && profile.username !== name) labels.append(element('small', '', profile.username));
+  $('account-identity').append(picture, labels);
+  $('change-account').addEventListener('click', () => {
+    showDialog('Change account', `<p>Choose or add the other account in ChatGPT’s account menu, then come back here and continue. Your other ChatGPT session can stay signed in.</p>
+      <div class="account-actions">
+        <a class="button outline" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Open ChatGPT</a>
+        <a class="button primary" href="${signInPath}" target="_top">Continue with ChatGPT</a>
+      </div>`);
+  });
 }
 
 const usernameField = `<label class="field">Username<input name="username" pattern="[A-Za-z0-9_]{3,24}" maxlength="24" placeholder="e.g. moonlight" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="username-help" required><small id="username-help">Choose 3–24 letters, numbers, or underscores. Lobby adds an available four-digit tag.</small></label>`;
@@ -74,7 +106,7 @@ export async function showProfileEditor() {
     const data = await api('/profile');
     if (!marker.isConnected) return;
     if (!data.signedIn) {
-      showDialog('Edit your profile', '<p>Sign in to save a profile you can use across your rooms.</p><div class="dialog-actions below"><a class="button primary" href="/signin-with-chatgpt" target="_top">Sign in</a></div>');
+      showDialog('Edit your profile', `<p>Sign in to save a profile you can use across your rooms.</p><div class="dialog-actions below"><a class="button primary" href="${signInPath}" target="_top">Sign in</a></div>`);
       return;
     }
     applyOwnProfile(data);

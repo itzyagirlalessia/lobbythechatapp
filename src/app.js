@@ -2,10 +2,10 @@
 import { createVoiceController } from './voice.js';
 import { createRoomBoard } from './board.js';
 import { createSocial } from './social.js';
-import { drafts, preferences, saveStorage, saved, state } from './state.js';
+import { drafts, loadAccountStorage, preferences, saveStorage, saved, state } from './state.js';
 import { $, api, avatar, closeDialog, closeMemberCard, dialogForm, element, handleForm, icon, narrowScreen, notifyAttention, showDialog, toast } from './ui.js';
 import { inviteCode, removeInviteFragment, restoreAccess, showInvite, showRoomForm, syncAccountRooms } from './rooms.js';
-import { applyOwnProfile, renderProfile, showProfileEditor, showStatusForm, showUsernameSetup } from './profile.js';
+import { applyOwnProfile, renderProfile, showAccountMenu, showProfileEditor, showStatusForm, showUsernameSetup } from './profile.js';
 import { applyRoomIdentity, organizeChannels, renderChannelDetails, showAiSettings, showChannelDetails, showChannelForm, showRoomInfo, showRoomSettings } from './room-settings.js';
 import { renderVoiceChannels, renderVoiceDock, showVoiceChannelForm, showVoiceDetails } from './voice-ui.js';
 import { positionMemberCard, refreshActivity, renderPeople, showMemberProfile, showPeople, updateAi } from './people.js';
@@ -499,6 +499,7 @@ $('message-stream').addEventListener('scroll', () => {
 }, { passive: true });
 $('help-button').addEventListener('click', () => { toggleSidebar(false); showHelp(); });
 $('edit-profile').addEventListener('click', showProfileEditor);
+$('account-menu').addEventListener('click', showAccountMenu);
 $('edit-from-member-card').addEventListener('click', showProfileEditor);
 $('close-member-card').addEventListener('click', closeMemberCard);
 $('ai-settings').addEventListener('click', showAiSettings);
@@ -573,9 +574,13 @@ window.addEventListener('hashchange', () => { if (!state.usernameSetup) followSh
 window.addEventListener('resize', positionMemberCard);
 window.addEventListener('pagehide', voice.disconnect);
 window.addEventListener('pagehide', () => social.stop());
+window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
 
 applyPreferences();
-void api('/profile').then(data => {
+void api('/profile').then(async data => {
+  await loadAccountStorage(data.browserAccount, rooms => api('/profile/browser-rooms', { input: { rooms } }));
+  saveStorage();
+  applyPreferences();
   applyOwnProfile(data);
   const url = new URL(location.href);
   const spotify = url.searchParams.get('spotify');
