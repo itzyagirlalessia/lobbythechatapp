@@ -1,5 +1,6 @@
 import { assets } from './assets.js';
 import { normalizeProfileDesign, visibleProfileDesign, visibleProfileCode } from './profile-design.js';
+import { latestRelease } from './releases.js';
 
 const encoder = new TextEncoder();
 const model = 'gpt-5.4-mini';
@@ -369,7 +370,7 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
       profile.spotifyConnected = Boolean(connected);
     }
     const browserAccount = id ? await hash('lobby-browser-account:' + id) : null;
-    return { admin, signedIn: Boolean(id), profile, providers, browserAccount };
+    return { admin, signedIn: Boolean(id), profile, providers, browserAccount, seenRelease: entry?.seen_release ?? 0 };
   };
   let previous = id && await env.DB.prepare('SELECT * FROM profiles WHERE account_id = ?').bind(id).first();
   if (assigned && previous?.username !== assigned) previous = await assignReservedUsername(env.DB, id, assigned);
@@ -1889,6 +1890,16 @@ async function handleApi(request, env, ctx, url) {
     else if (!profile?.username) throw usernameRequired();
   }
   if (url.pathname.startsWith('/api/profile/spotify/')) return spotifyConnection(request, env, url, account);
+  if (method === 'POST' && url.pathname === '/api/profile/seen-release') {
+    if (!account) throw new AppError(401, 'Sign in to save this update to your account.');
+    const { release } = await body(request, 1024);
+    if (!Number.isInteger(release) || release < 1 || release > latestRelease.number) {
+      throw new AppError(400, 'Choose a published update.');
+    }
+    await env.DB.prepare('UPDATE profiles SET seen_release = ? WHERE account_id = ? AND seen_release < ?')
+      .bind(release, account, release).run();
+    return json({ seen: true });
+  }
   if (method === 'POST' && url.pathname === '/api/profile/status') return json(await updateStatus(env.DB, account, await body(request)));
   if (url.pathname === '/api/social' || url.pathname.startsWith('/api/social/')) return handleSocial(env.DB, request, url, account);
   if (method === 'POST' && url.pathname === '/api/rooms') return json(await createRoom(env.DB, await body(request), account), 201);

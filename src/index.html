@@ -264,6 +264,14 @@
     <div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" class="icon-button" id="close-dialog" aria-label="Close dialog"><svg class="icon"><use href="#close"/></svg></button></div>
     <div id="dialog-body"></div>
   </dialog>
+  <dialog id="release-dialog" aria-labelledby="release-title" aria-describedby="release-date">
+    <div class="dialog-head release-head">
+      <div><time id="release-date" class="release-date"></time><h2 id="release-title">What’s new in Lobby</h2></div>
+      <form method="dialog"><button class="icon-button" aria-label="Close updates"><svg class="icon" aria-hidden="true"><use href="#close"/></svg></button></form>
+    </div>
+    <ul class="release-highlights" id="release-highlights"></ul>
+    <form method="dialog" class="dialog-actions below"><button class="button primary">Got it</button></form>
+  </dialog>
   <section class="member-popup" id="member-card" popover="auto" role="dialog" aria-labelledby="member-card-title">
     <button class="icon-button member-popup-close" type="button" id="close-member-card" aria-label="Close profile" autofocus><svg class="icon"><use href="#close"/></svg></button>
     <div id="member-profile"></div>

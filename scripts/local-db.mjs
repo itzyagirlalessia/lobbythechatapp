@@ -16,6 +16,7 @@ export function openLocalDatabase(filename) {
     ['spotify_connections', '0011_spotify_listening.sql'],
     ['spotify_connections', '0012_spotify_oauth_verifier.sql', 'pending_verifier'],
     ['profiles', '0013_profile_studio_and_sidebar.sql', 'design_json'],
+    ['profiles', '0014_seen_release.sql', 'seen_release'],
   ];
   for (const [table, file, column] of migrations) {
     const applied = column ? sqlite.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column)

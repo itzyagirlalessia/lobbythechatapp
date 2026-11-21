@@ -4,6 +4,7 @@ import { saved, state } from './state.js';
 import { $, api, closeDialog, dialogForm, element, handleForm, icon, pictureImage, showDialog, toast, updateAvatar } from './ui.js';
 import { syncAccountRooms } from './rooms.js';
 import { toggleSidebar } from './settings.js';
+import { prepareReleaseNotice } from './release-notice.js';
 import { refresh, restorePage, social } from './app.js';
 import { applyProfileDesign, bindProfileStudio, codeFields, designFields, profileFacts, renderProfileCode } from './profile-studio.js';
 
@@ -58,13 +59,15 @@ export function showUsernameSetup() {
   $('close-dialog').hidden = true;
   $('dialog-body').querySelector('[data-dismiss]').remove();
   handleForm(async data => {
-    applyOwnProfile(await api('/profile/username', { input: { username: data.get('username') } }));
+    const profile = await api('/profile/username', { input: { username: data.get('username') } });
+    applyOwnProfile(profile);
     state.usernameSetup = false;
     $('close-dialog').hidden = false;
     closeDialog();
     if (state.session && !location.hash) void refresh(state.session);
     else restorePage();
     void syncAccountRooms();
+    prepareReleaseNotice(profile);
   });
 }
 
