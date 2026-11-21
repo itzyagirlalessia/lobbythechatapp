@@ -30,6 +30,12 @@ const namedAccount = (id, email) => ({ 'oai-authenticated-user-id': id, 'oai-aut
 const identities = new Map();
 let inferenceCount = 0;
 let providerCalls = 0;
+const songUrl = 'https://open.spotify.com/track/0123456789TestTrackABC';
+const songImage = 'https://i.scdn.co/image/testcover';
+const previewImage = 'https://image-cdn-ak.spotifycdn.com/image/testcover';
+let spotifyPrivate = true;
+let spotifyTokenCalls = 0;
+let spotifyRefreshes = 0;
 
 globalThis.fetch = async (url, options) => {
   const requestUrl = new URL(url);
@@ -44,6 +50,31 @@ globalThis.fetch = async (url, options) => {
     assert.equal(requestUrl.searchParams.get('user'), 'test-user');
     providerCalls++;
     return Response.json({ recenttracks: { track: [{ name: 'Test Song', artist: { '#text': 'Test Artist' }, '@attr': { nowplaying: 'true' } }] } });
+  }
+  if (requestUrl.href.startsWith('https://open.spotify.com/oembed?')) {
+    assert.equal(requestUrl.searchParams.get('url'), songUrl);
+    return Response.json({ title: 'Paper Satellites', thumbnail_url: previewImage, html: '<script>ignored</script>' });
+  }
+  if (requestUrl.href === 'https://accounts.spotify.com/api/token') {
+    const params = new URLSearchParams(options.body);
+    assert.equal(params.get('client_id'), env.DUO_SPOTIFY_CLIENT_ID);
+    if (params.get('grant_type') === 'refresh_token') {
+      spotifyRefreshes++;
+      assert.equal(params.get('refresh_token'), 'spotify-test-refresh');
+      return Response.json({ access_token: 'spotify-test-access', expires_in: 3600 });
+    }
+    spotifyTokenCalls++;
+    assert.equal(params.get('grant_type'), 'authorization_code');
+    assert.equal(params.get('code'), 'spotify-test-code');
+    assert.equal(params.get('redirect_uri'), env.DUO_SPOTIFY_REDIRECT_URI);
+    assert.match(params.get('code_verifier'), /^[a-f0-9]{96}$/);
+    return Response.json({ access_token: 'spotify-test-access', refresh_token: 'spotify-test-refresh', expires_in: spotifyPrivate ? 3600 : 1 });
+  }
+  if (requestUrl.href === 'https://api.spotify.com/v1/me/player') {
+    assert.equal(options.headers.Authorization, 'Bearer spotify-test-access');
+    return Response.json({ is_playing: true, device: { is_private_session: spotifyPrivate }, progress_ms: 45_000,
+      item: { type: 'track', id: songUrl.split('/').at(-1), name: 'Paper Satellites', duration_ms: 180_000,
+        artists: [{ name: 'Night Signal' }], album: { images: [{ width: 300, url: songImage }] } } });
   }
   assert.equal(options.headers.Authorization, `Bearer ${fakeKey}`);
   if (url.endsWith('/models/gpt-5.4-mini')) return Response.json({ id: 'gpt-5.4-mini' });
@@ -232,6 +263,80 @@ await request(activityPath, null, host.access);
 assert.equal(providerCalls, 2);
 await request('/api/profile', profile, null, 200, plainBlair);
 assert.deepEqual(await request(activityPath, null, host.access), { game: '', music: '' });
+
+const listeningPath = roomPath + '/listening?member=' + blair.memberId;
+const songProfile = { ...profile, spotifyTrack: songUrl + '?si=private-share-token', spotifyArtist: 'Night Signal' };
+await request('/api/profile', { ...songProfile, spotifyTrack: 'https://open.spotify.com.example/track/0123456789TestTrackABC' }, null, 400, plainBlair);
+assert.equal((await request('/api/profile', songProfile, null, 200, plainBlair)).profile.spotifyTrack, songUrl);
+assert.deepEqual(await request(listeningPath, null, host.access), { track: null });
+await request('/api/profile', { ...songProfile, shareActivity: true }, null, 200, plainBlair);
+await request(listeningPath, null, null, 401);
+assert.deepEqual(await request('/api/rooms/' + otherRoom.id + '/listening?member=' + blair.memberId, null, otherRoom.access, 200, moderator), { track: null });
+const manualTrack = { url: songUrl, title: 'Paper Satellites', artist: 'Night Signal', image: previewImage, live: false };
+assert.deepEqual(await request(listeningPath, null, host.access), { track: manualTrack });
+assert.equal((await request('/api/profile', { ...profile, shareActivity: true }, null, 200, plainBlair)).profile.spotifyTrack, songUrl);
+
+const spotifyOrigin = 'https://lobby.example.test';
+const spotifyPath = '/api/profile/spotify/';
+env.DUO_SPOTIFY_REDIRECT_URI = spotifyOrigin + spotifyPath + 'callback';
+env.DUO_SPOTIFY_CLIENT_ID = '0123456789abcdef0123456789abcdef';
+function spotifyRequest(path, { identity = plainBlair, access, input, cookie } = {}) {
+  const headers = new Headers(identity);
+  if (access) headers.set('Authorization', 'Bearer ' + access);
+  if (input) headers.set('Content-Type', 'application/json');
+  if (cookie) headers.set('Cookie', cookie);
+  return app.fetch(new Request(spotifyOrigin + path, {
+    method: input ? 'POST' : 'GET', headers, body: input ? JSON.stringify(input) : undefined,
+  }), env, context);
+}
+
+async function connectSpotify(checkState = false) {
+  const start = await spotifyRequest(spotifyPath + 'connect', { input: {} });
+  assert.equal(start.status, 200);
+  const cookie = start.headers.get('Set-Cookie');
+  assert.match(cookie, /HttpOnly; Secure; SameSite=Lax/);
+  const { url } = await start.json();
+  const authorize = new URL(url);
+  assert.equal(authorize.origin, 'https://accounts.spotify.com');
+  assert.equal(authorize.searchParams.get('scope'), 'user-read-playback-state');
+  assert.equal(authorize.searchParams.get('code_challenge_method'), 'S256');
+  const callback = spotifyPath + 'callback?code=spotify-test-code&state=' + authorize.searchParams.get('state');
+  if (checkState) {
+    assert.equal((await spotifyRequest(callback, { cookie, identity: namedAccount('different-user') })).headers.get('Location'), '/?spotify=failed');
+    assert.equal((await spotifyRequest(callback)).headers.get('Location'), '/?spotify=failed');
+    assert.equal(spotifyTokenCalls, 0);
+  }
+  assert.equal((await spotifyRequest(callback, { cookie })).headers.get('Location'), '/?spotify=connected');
+  assert.equal((await spotifyRequest(callback, { cookie })).headers.get('Location'), '/?spotify=failed');
+}
+
+assert.equal((await spotifyRequest(spotifyPath + 'connect', { input: {}, identity: {} })).status, 401);
+await connectSpotify(true);
+const viewing = { access: host.access, identity: {} };
+assert.deepEqual(await (await spotifyRequest(listeningPath, viewing)).json(), { track: manualTrack });
+const disconnect = () => spotifyRequest(spotifyPath + 'disconnect', { input: {} });
+assert.equal((await disconnect()).status, 200);
+spotifyPrivate = false;
+await connectSpotify();
+assert.equal((await (await spotifyRequest('/api/profile')).json()).profile.spotifyConnected, true);
+const dbSpotify = await env.DB.prepare('SELECT credentials FROM spotify_connections WHERE account_id = ?').bind('test-account').first();
+assert(!dbSpotify.credentials.includes('spotify-test-'));
+const liveTrack = (await (await spotifyRequest(listeningPath, viewing)).json()).track;
+assert(liveTrack.live);
+assert.equal(liveTrack.position, 45_000);
+assert.equal(liveTrack.duration, 180_000);
+assert.equal(liveTrack.artist, 'Night Signal');
+assert.equal(spotifyRefreshes, 1);
+assert(!JSON.stringify(liveTrack).includes('spotify-test-'));
+await request('/api/profile', songProfile, null, 200, plainBlair);
+assert.deepEqual(await (await spotifyRequest(listeningPath, viewing)).json(), { track: null });
+await request('/api/profile', { ...songProfile, shareActivity: true }, null, 200, plainBlair);
+assert.equal((await disconnect()).status, 200);
+assert.deepEqual(await (await spotifyRequest(listeningPath, viewing)).json(), { track: manualTrack });
+await request('/api/profile', { ...profile, spotifyTrack: '' }, null, 200, plainBlair);
+assert.deepEqual(await request(listeningPath, null, host.access), { track: null });
+delete env.DUO_SPOTIFY_CLIENT_ID;
+delete env.DUO_SPOTIFY_REDIRECT_URI;
 
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/a9xkAAAAASUVORK5CYII=';
 const details = [{ label: 'Interests', value: 'Puzzle games' }, { label: 'Languages', value: 'English and Dutch' }];
@@ -743,4 +848,4 @@ await request('/api/join', { name: 'Cap guest', invite: capRoom.invite }, null, 
 for (let i = 0; i < 98; i++) await request('/api/join', { name: `Guest ${i}`, invite: capRoom.invite }, null, 201);
 await request('/api/join', { name: 'One too many', invite: capRoom.invite }, null, 409);
 await request('/api/join', { name: 'Cap guest', invite: capRoom.invite }, null, 201, capGuest);
-console.log('Verified restoring rooms for signed-in accounts, asset revalidation, room limits per person, one People entry per account, cross-device presence and self profiles, distinct same-name users, and existing chat features.');
+console.log('Verified shared Spotify tracks, live Spotify permissions and privacy, room restoration, asset revalidation, member limits and presence, and existing chat features.');

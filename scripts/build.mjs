@@ -21,11 +21,13 @@ const files = [
   ['/room-settings.js', 'room-settings.js', 'text/javascript; charset=utf-8'],
   ['/voice-ui.js', 'voice-ui.js', 'text/javascript; charset=utf-8'],
   ['/people.js', 'people.js', 'text/javascript; charset=utf-8'],
+  ['/listening.js', 'listening.js', 'text/javascript; charset=utf-8'],
   ['/messages.js', 'messages.js', 'text/javascript; charset=utf-8'],
   ['/history.js', 'history.js', 'text/javascript; charset=utf-8'],
   ['/composer.js', 'composer.js', 'text/javascript; charset=utf-8'],
   ['/settings.js', 'settings.js', 'text/javascript; charset=utf-8'],
   ['/favicon.svg', 'favicon.svg', 'image/svg+xml'],
+  ['/spotify-logo.svg', 'spotify-logo.svg', 'image/svg+xml'],
   ['/pluma.png', 'pluma.png', 'image/png'],
 ];
 const entries = await Promise.all(files.map(async ([route, name, type]) => {

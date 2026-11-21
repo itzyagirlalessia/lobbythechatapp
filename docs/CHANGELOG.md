@@ -7,6 +7,10 @@ Newest first. Each entry is tagged with who made it:
 
 Keep entries to one line. Add yours at the top of today's date (create the date heading if needed).
 
+## 2026-11-21
+
+- **[itzyagirlalessia]** Added a Spotify listening card to room profiles, with shared tracks and optional live playback progress.
+
 ## 2026-11-18
 
 - **[Wilmer]** Split the 2,700-line `app.js` into 12 feature modules (see the code map in `AGENTS.md`); no behaviour changes.

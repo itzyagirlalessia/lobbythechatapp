@@ -9,6 +9,7 @@ import { applyOwnProfile, renderProfile, showProfileEditor, showStatusForm, show
 import { applyRoomIdentity, organizeChannels, renderChannelDetails, showAiSettings, showChannelDetails, showChannelForm, showRoomInfo, showRoomSettings } from './room-settings.js';
 import { renderVoiceChannels, renderVoiceDock, showVoiceChannelForm, showVoiceDetails } from './voice-ui.js';
 import { positionMemberCard, refreshActivity, renderPeople, showMemberProfile, showPeople, updateAi } from './people.js';
+import { refreshProfileListening } from './listening.js';
 import { appendMessages, imageDrafts, jumpLatest, nearLatest, readVisibleMessages, renderAttachment, replyDrafts, showAttachImage, showMessageEditor, showPollCreator, showReplyComposer, updateHistoryNote, updateMessageAuthors } from './messages.js';
 import { highlightMessage, refreshMentions, renderMentionBadge, showBookmarks, showHistoryResult, showMentions, showPins, showSearch } from './history.js';
 import { chooseMention, clearMentionSuggestions, selectMentionSuggestion, sendMessage, sendTyping, setDraft, showMentionSuggestions, showTyping, storeDraft, updateComposer } from './composer.js';
@@ -356,6 +357,7 @@ export async function refresh(current) {
     showTyping(data.typing ?? []);
     setConnection('Live');
     void refreshActivity(current);
+    void refreshProfileListening(current);
     void refreshMentions(current);
     void roomBoard.refresh();
   } catch (error) {
@@ -575,6 +577,15 @@ window.addEventListener('pagehide', () => social.stop());
 applyPreferences();
 void api('/profile').then(data => {
   applyOwnProfile(data);
+  const url = new URL(location.href);
+  const spotify = url.searchParams.get('spotify');
+  if (['connected', 'declined', 'failed'].includes(spotify)) {
+    url.searchParams.delete('spotify');
+    history.replaceState(history.state, '', url);
+    const message = { connected: 'Spotify connected. Your live track can now appear in room profiles.',
+      declined: 'Spotify connection cancelled.', failed: 'Couldn’t connect Spotify. Check your access and try again.' };
+    toast(message[spotify]);
+  }
   if (data.signedIn && !data.profile.username) showUsernameSetup();
   else {
     restorePage();
