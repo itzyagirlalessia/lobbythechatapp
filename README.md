@@ -79,6 +79,14 @@ See [GitHub Pages documentation](https://docs.github.com/en/pages/getting-starte
 
 `DUO_ADMIN_EMAILS` and `DUO_ACCOUNT_ASSIGNMENTS` contain private admin and username assignments on the existing host. Reapply them securely when migrating. `DUO_STEAM_API_KEY` and `DUO_LASTFM_API_KEY` enable optional live activity.
 
+### Spotify listening card
+
+Anyone can paste a song link under **Edit profile → Spotify listening card** and enable activity sharing. Lobby uses Spotify's [oEmbed endpoint](https://developer.spotify.com/documentation/embeds/reference/oembed) for the title and artwork. This path needs no Spotify developer credentials.
+
+For live track and progress, register Lobby in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard). Choose the Web API and register the exact HTTPS redirect `https://<your-lobby-host>/api/profile/spotify/callback`. Set `DUO_SPOTIFY_CLIENT_ID` and `DUO_SPOTIFY_REDIRECT_URI` on the host with the client ID and that same URI, then deploy. The existing `ROOM_KEY_ENCRYPTION` key also protects Spotify tokens. Lobby uses PKCE and needs no Spotify client secret.
+
+In [Spotify Development Mode](https://developer.spotify.com/documentation/web-api/concepts/quota-modes), the developer app owner needs Spotify Premium and must add each listener to the app's allowlist, up to five listeners for a new app. Approved listeners can choose **Save and connect Spotify** in the profile editor. Live status uses read-only playback permission and appears while the listener is online and sharing. Disconnect from the profile editor to erase the stored connection.
+
 ChatGPT replies use the room host's OpenAI API key and API billing. DMs do not send messages to the AI provider. DMs are protected by application access controls and are not end-to-end encrypted.
 
 Scheduled room messages deliver when someone opens the room at or after their due time. Reminders and browser notifications require the app to be open.

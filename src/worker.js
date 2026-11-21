@@ -23,8 +23,13 @@ const gifLimit = 3_000_000;
 const gifMaxDimension = 4096;
 const reactionOptions = new Set(['👍', '💜', '😂', '🎉', '👀', '🔥']);
 const activityCache = new Map();
+const spotifyTrackId = /^[a-zA-Z0-9]{22}$/;
+const spotifyCallback = '/api/profile/spotify/callback';
+const spotifyScope = 'user-read-playback-state';
+const spotifyCookie = '__Host-lobby-spotify';
+let spotifyRetryAt = 0;
 const security = {
-  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com",
+  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; img-src 'self' data: https://i.scdn.co https://image-cdn-ak.spotifycdn.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com",
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
 };
@@ -290,6 +295,7 @@ function profileData(entry) {
     usernameAssigned: reservedUsernames.has(entry?.username),
     status: activeStatus(entry),
     game: entry?.game || '', music: entry?.music || '', shareActivity: Boolean(entry?.share_activity),
+    spotifyTrack: entry?.spotify_track ? spotifyTrackUrl(entry.spotify_track) : '', spotifyArtist: entry?.spotify_artist || '',
     connections: connections(entry || {}), avatar: mediaUrl(entry?.avatar_key), banner: mediaUrl(entry?.banner_key),
     details: JSON.parse(entry?.details_json || '[]'),
   };
@@ -354,8 +360,15 @@ async function withRandomTag(db, base, save) {
 }
 
 async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly = false) {
-  const providers = liveProviders(env);
-  const profileResponse = entry => ({ admin, signedIn: Boolean(id), profile: profileData(entry), providers });
+  const providers = { ...liveProviders(env), spotify: Boolean(spotifyConfig(env, new URL(request.url))) };
+  const profileResponse = async entry => {
+    const profile = profileData(entry);
+    if (entry) {
+      const connected = await env.DB.prepare('SELECT 1 FROM spotify_connections WHERE account_id = ? AND credentials IS NOT NULL').bind(id).first();
+      profile.spotifyConnected = Boolean(connected);
+    }
+    return { admin, signedIn: Boolean(id), profile, providers };
+  };
   let previous = id && await env.DB.prepare('SELECT * FROM profiles WHERE account_id = ?').bind(id).first();
   if (assigned && previous?.username !== assigned) previous = await assignReservedUsername(env.DB, id, assigned);
   if (request.method === 'GET') return profileResponse(previous);
@@ -380,24 +393,28 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
   const steam = accountLink(input.steam, 'steam');
   const lastfm = accountLink(input.lastfm, 'lastfm');
   const spotify = accountLink(input.spotify, 'spotify');
+  const spotifyTrack = input.spotifyTrack === undefined ? previous?.spotify_track || '' : parseSpotifyTrack(input.spotifyTrack);
+  const spotifyArtist = spotifyTrack ? optionalText(input.spotifyArtist ?? previous?.spotify_artist ?? '', 120, 'Track artist') : '';
   const details = input.details === undefined ? (previous?.details_json || '[]') : JSON.stringify(detailsList(input.details));
   const entry = await savePictures(env, ctx, [
     { name: 'avatar', input: input.avatarImage, old: previous?.avatar_key, limit: 180_000 },
     { name: 'banner', input: input.bannerImage, old: previous?.banner_key, limit: 600_000 },
   ], ({ avatar, banner }) => {
     const write = username => env.DB.prepare(`
-        INSERT INTO profiles (account_id, display_name, username, bio, color, game, music, steam, lastfm, spotify, share_activity, avatar_key, banner_key, details_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET
+        INSERT INTO profiles (account_id, display_name, username, bio, color, game, music, steam, lastfm, spotify, share_activity, avatar_key, banner_key, details_json, spotify_track, spotify_artist)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET
           display_name = excluded.display_name, bio = excluded.bio, color = excluded.color,
           username = coalesce(excluded.username, profiles.username),
           game = excluded.game, music = excluded.music, steam = excluded.steam, lastfm = excluded.lastfm,
           spotify = excluded.spotify, share_activity = excluded.share_activity, details_json = excluded.details_json,
+          spotify_track = excluded.spotify_track, spotify_artist = excluded.spotify_artist,
           avatar_key = excluded.avatar_key, banner_key = excluded.banner_key
         WHERE profiles.avatar_key IS ? AND profiles.banner_key IS ?
           AND (excluded.username IS NULL OR profiles.username IS ?)
         RETURNING *
       `).bind(id, displayName, username, bio, color, game, music, steam, lastfm, spotify, input.shareActivity === true ? 1 : 0,
-        avatar, banner, details, previous?.avatar_key ?? null, previous?.banner_key ?? null, previous?.username ?? null).first();
+        avatar, banner, details, spotifyTrack || null, spotifyArtist || null,
+        previous?.avatar_key ?? null, previous?.banner_key ?? null, previous?.username ?? null).first();
     return base && base !== previous?.username?.split('#')[0] ? withRandomTag(env.DB, base, write) : write(null);
   });
   return profileResponse(entry);
@@ -414,13 +431,13 @@ async function providerJson(base, params) {
   return response.json();
 }
 
-function cachedActivity(key, get) {
+function cachedActivity(key, get, ttl = 45_000) {
   const now = Date.now();
   const cached = activityCache.get(key);
   if (cached?.expires > now) return cached.value;
   if (activityCache.size >= 350) activityCache.delete(activityCache.keys().next().value);
   const value = get().catch(() => '');
-  activityCache.set(key, { value, expires: now + 45_000 });
+  activityCache.set(key, { value, expires: now + ttl });
   return value;
 }
 
@@ -443,6 +460,202 @@ async function lastfmTrack(key, user) {
   if (track?.['@attr']?.nowplaying !== 'true' || typeof track.name !== 'string') return '';
   const artist = track.artist?.['#text'];
   return (typeof artist === 'string' && artist ? `${track.name} · ${artist}` : track.name).slice(0, 100);
+}
+
+function spotifyTrackUrl(id) {
+  return 'https://open.spotify.com/track/' + id;
+}
+
+function parseSpotifyTrack(value) {
+  const text = optionalText(value, 500, 'Spotify track link');
+  if (!text) return '';
+  try {
+    const url = new URL(text);
+    const path = /^\/(?:intl-[a-z-]+\/)?track\/([a-zA-Z0-9]{22})\/?$/.exec(url.pathname);
+    if (url.origin === 'https://open.spotify.com' && !url.username && !url.password && path) return path[1];
+  } catch {
+    // Use the same message for malformed URLs and other Spotify content types.
+  }
+  throw new AppError(400, 'Copy a link to a song from Spotify. It should start with https://open.spotify.com/track/.');
+}
+
+function spotifyArtwork(value) {
+  return typeof value === 'string' && /^https:\/\/(?:i\.scdn\.co|image-cdn-ak\.spotifycdn\.com)\/image\/[a-zA-Z0-9]+$/.test(value) ? value : '';
+}
+
+function spotifyConfig(env, url) {
+  const clientId = env.DUO_SPOTIFY_CLIENT_ID;
+  const redirectUri = url.origin + spotifyCallback;
+  if (!/^[a-f0-9]{32}$/i.test(clientId ?? '') || !env.ROOM_KEY_ENCRYPTION ||
+      url.protocol !== 'https:' || env.DUO_SPOTIFY_REDIRECT_URI !== redirectUri) return null;
+  return { clientId, redirectUri };
+}
+
+function spotifySessionCookie(value, seconds) {
+  return spotifyCookie + '=' + value + '; Path=/; Max-Age=' + seconds + '; HttpOnly; Secure; SameSite=Lax';
+}
+
+function spotifyReturn(result) {
+  return new Response(null, { status: 303, headers: { ...security, Location: '/?spotify=' + result,
+    'Set-Cookie': spotifySessionCookie('', 0), 'Cache-Control': 'no-store' } });
+}
+
+async function startSpotifyConnection(env, account, config) {
+  const state = token();
+  const verifier = token() + token();
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(verifier)));
+  const challenge = btoa(String.fromCharCode(...digest)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  await env.DB.prepare(`INSERT INTO spotify_connections (account_id, pending_state, pending_until) VALUES (?, ?, ?)
+    ON CONFLICT(account_id) DO UPDATE SET pending_state = excluded.pending_state, pending_until = excluded.pending_until`)
+    .bind(account, await hash(state), Date.now() + 600_000).run();
+  const url = new URL('https://accounts.spotify.com/authorize');
+  url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri,
+    response_type: 'code', scope: spotifyScope, state, code_challenge: challenge, code_challenge_method: 'S256' });
+  const response = json({ url: url.href });
+  response.headers.set('Set-Cookie', spotifySessionCookie(state + '.' + verifier, 600));
+  return response;
+}
+
+async function spotifyToken(config, params, previousRefreshToken) {
+  const response = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST', body: new URLSearchParams({ client_id: config.clientId, ...params }),
+    redirect: 'error', signal: AbortSignal.timeout(5000),
+  });
+  const data = await response.json().catch(() => null);
+  if (data?.error === 'invalid_grant') return null;
+  if (!response.ok || !data || !Number.isFinite(data.expires_in) || data.expires_in <= 0 ||
+      typeof data.access_token !== 'string' || !data.access_token ||
+      (data.scope && !data.scope.split(' ').includes(spotifyScope))) throw new Error('Spotify authorization failed.');
+  const refreshToken = data.refresh_token || previousRefreshToken;
+  if (typeof refreshToken !== 'string' || !refreshToken) throw new Error('Spotify refresh token was not returned.');
+  return { accessToken: data.access_token, refreshToken, expires: Date.now() + data.expires_in * 1000 };
+}
+
+async function finishSpotifyConnection(request, env, url, account, config) {
+  if (!account || !config) return spotifyReturn('failed');
+  const cookie = request.headers.get('Cookie')?.match(/(?:^|;\s*)__Host-lobby-spotify=([a-f0-9]{48})\.([a-f0-9]{96})(?:;|$)/);
+  const state = url.searchParams.get('state');
+  if (!cookie || state !== cookie[1]) return spotifyReturn('failed');
+  const pending = await hash(state);
+  const attempt = await env.DB.prepare('SELECT 1 FROM spotify_connections WHERE account_id = ? AND pending_state = ? AND pending_until > ?')
+    .bind(account, pending, Date.now()).first();
+  if (!attempt) return spotifyReturn('failed');
+  const code = url.searchParams.get('code');
+  let result = 'declined';
+  if (code && code.length <= 1024 && !url.searchParams.has('error')) {
+    try {
+      const data = await spotifyToken(config, { grant_type: 'authorization_code', code, code_verifier: cookie[2], redirect_uri: config.redirectUri });
+      if (data) {
+        const credentials = await encryptKey(env, 'spotify:' + account, JSON.stringify(data));
+        const saved = await env.DB.prepare(`UPDATE spotify_connections SET connection_id = ?, credentials = ?, refresh_until = 0, pending_state = NULL, pending_until = NULL
+          WHERE account_id = ? AND pending_state = ? AND pending_until > ? RETURNING connection_id`)
+          .bind(crypto.randomUUID(), credentials, account, pending, Date.now()).first();
+        if (saved) return spotifyReturn('connected');
+      }
+    } catch {
+      // Keep any existing connection if the new authorization fails.
+    }
+    result = 'failed';
+  }
+  await env.DB.prepare('UPDATE spotify_connections SET pending_state = NULL, pending_until = NULL WHERE account_id = ? AND pending_state = ?')
+    .bind(account, pending).run();
+  return spotifyReturn(result);
+}
+
+async function spotifyConnection(request, env, url, account) {
+  const config = spotifyConfig(env, url);
+  if (request.method === 'GET' && url.pathname === spotifyCallback) return finishSpotifyConnection(request, env, url, account, config);
+  if (!account) throw new AppError(401, 'Sign in to connect Spotify.');
+  if (request.method === 'POST') {
+    await body(request, 1024);
+    if (url.pathname === '/api/profile/spotify/disconnect') {
+      await env.DB.prepare('DELETE FROM spotify_connections WHERE account_id = ?').bind(account).run();
+      const response = json({ connected: false });
+      response.headers.set('Set-Cookie', spotifySessionCookie('', 0));
+      return response;
+    }
+    if (url.pathname === '/api/profile/spotify/connect') {
+      if (!config) throw new AppError(503, 'Live Spotify sharing isn’t configured for this site.');
+      return startSpotifyConnection(env, account, config);
+    }
+  }
+  throw new AppError(405, 'This Spotify action is unavailable.');
+}
+
+async function spotifyPlayback(env, config, entry) {
+  if (Date.now() < spotifyRetryAt) return null;
+  const key = 'spotify:' + entry.account_id;
+  let credentials = JSON.parse(await decryptKey(env, key, entry.credentials));
+  const readPlayback = accessToken => fetch('https://api.spotify.com/v1/me/player', {
+    headers: { Authorization: 'Bearer ' + accessToken }, redirect: 'error', signal: AbortSignal.timeout(3500),
+  });
+  let response = credentials.expires > Date.now() + 30_000 ? await readPlayback(credentials.accessToken) : null;
+  if (!response || response.status === 401) {
+    await response?.body?.cancel();
+    const now = Date.now();
+    const lease = now + 10_000;
+    const claimed = await env.DB.prepare(`UPDATE spotify_connections SET refresh_until = ?
+      WHERE account_id = ? AND credentials = ? AND connection_id = ? AND refresh_until <= ? RETURNING account_id`)
+      .bind(lease, entry.account_id, entry.credentials, entry.connection_id, now).first();
+    if (!claimed) return null;
+    try {
+      credentials = await spotifyToken(config, { grant_type: 'refresh_token', refresh_token: credentials.refreshToken }, credentials.refreshToken);
+      const encrypted = credentials ? await encryptKey(env, key, JSON.stringify(credentials)) : null;
+      const updated = await env.DB.prepare(`UPDATE spotify_connections SET credentials = ?, connection_id = ?, refresh_until = 0
+        WHERE account_id = ? AND connection_id = ? AND refresh_until = ? RETURNING account_id`)
+        .bind(encrypted, credentials ? entry.connection_id : null, entry.account_id, entry.connection_id, lease).first();
+      if (!updated || !credentials) return null;
+    } catch (error) {
+      await env.DB.prepare('UPDATE spotify_connections SET refresh_until = 0 WHERE account_id = ? AND connection_id = ? AND refresh_until = ?')
+        .bind(entry.account_id, entry.connection_id, lease).run();
+      throw error;
+    }
+    response = await readPlayback(credentials.accessToken);
+  }
+  if (!response.ok || response.status === 204) {
+    if (response.status === 429) {
+      spotifyRetryAt = Date.now() + Math.max(15, Number(response.headers.get('Retry-After')) || 30) * 1000;
+    }
+    await response.body?.cancel();
+    return null;
+  }
+  const playback = await response.json();
+  const track = playback?.item;
+  if (!playback?.is_playing || playback.device?.is_private_session !== false ||
+      track?.type !== 'track' || track.is_local || !spotifyTrackId.test(track.id ?? '') || typeof track.name !== 'string') return null;
+  const duration = Number.isFinite(track.duration_ms) && track.duration_ms > 0 ? track.duration_ms : null;
+  const position = duration && Number.isFinite(playback.progress_ms) ? Math.max(0, Math.min(playback.progress_ms, duration)) : null;
+  return {
+    url: spotifyTrackUrl(track.id), title: track.name.slice(0, 320),
+    artist: (track.artists ?? []).map(artist => artist.name).filter(name => typeof name === 'string').join(', ').slice(0, 320),
+    image: spotifyArtwork(track.album?.images?.find(image => image.width <= 320)?.url || track.album?.images?.[0]?.url),
+    live: true, position, duration, observedAt: Date.now(),
+  };
+}
+
+async function roomListening(env, url, roomId, memberId) {
+  if (!memberId || !idPattern.test(memberId)) throw new AppError(400, 'Choose a room member.');
+  const entry = await env.DB.prepare(`SELECT m.account_id, p.spotify_track, p.spotify_artist, s.connection_id, s.credentials,
+    EXISTS (SELECT 1 FROM members active WHERE active.room_id = m.room_id AND active.account_id = m.account_id AND active.last_seen > ?) AS online
+    FROM members m JOIN profiles p ON p.account_id = m.account_id LEFT JOIN spotify_connections s ON s.account_id = m.account_id
+    WHERE m.id = ? AND m.room_id = ? AND p.share_activity = 1 AND NOT EXISTS (
+      SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor = 'account:' || m.account_id)`)
+    .bind(Date.now() - onlineWindow, memberId, roomId).first();
+  if (!entry) return { track: null };
+  const config = spotifyConfig(env, url);
+  if (config && entry.online && entry.credentials) {
+    const live = await cachedActivity('spotify-live:' + entry.connection_id, () => spotifyPlayback(env, config, entry), 12_000);
+    if (live) {
+      const { observedAt, ...track } = live;
+      return { track: { ...track, age: Date.now() - observedAt } };
+    }
+  }
+  if (!spotifyTrackId.test(entry.spotify_track ?? '')) return { track: null };
+  const href = spotifyTrackUrl(entry.spotify_track);
+  const preview = await cachedActivity('spotify-link:' + entry.spotify_track,
+    () => providerJson('https://open.spotify.com/oembed', { url: href }), 300_000);
+  return { track: { url: href, title: typeof preview?.title === 'string' ? preview.title.slice(0, 320) : 'Spotify track',
+    artist: entry.spotify_artist || '', image: spotifyArtwork(preview?.thumbnail_url), live: false } };
 }
 
 async function roomActivity(env, roomId, memberId) {
@@ -1337,7 +1550,7 @@ async function handleSocial(db, request, url, account) {
   throw new AppError(405, 'This action is unavailable.');
 }
 
-async function getRoom(db, roomId, member, admin, channel, after, revision, through) {
+async function getRoom(db, roomId, member, admin, channel, after, revision, through, spotifyEnabled) {
   await deliverScheduled(db, roomId);
   const now = Date.now();
   if (member.last_seen < now - 22_000) {
@@ -1347,8 +1560,9 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
   const incremental = after > 0 && !reset;
   const [people, page, channels, voice] = await db.batch([
     db.prepare(`SELECT m.id, m.account_id, m.name, m.is_host, m.last_seen, m.typing_channel, m.typing_until, p.display_name, p.bio, p.color,
-      p.game, p.music, p.share_activity, p.steam, p.lastfm, p.spotify, p.avatar_key, p.banner_key, p.details_json, p.username, p.status_text, p.status_until
-      FROM members m LEFT JOIN profiles p ON p.account_id = m.account_id
+      p.game, p.music, p.share_activity, p.steam, p.lastfm, p.spotify, p.spotify_track, p.spotify_artist,
+      s.credentials IS NOT NULL AS spotify_connected, p.avatar_key, p.banner_key, p.details_json, p.username, p.status_text, p.status_until
+      FROM members m LEFT JOIN profiles p ON p.account_id = m.account_id LEFT JOIN spotify_connections s ON s.account_id = p.account_id
       WHERE m.room_id = ? AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor = CASE WHEN m.account_id IS NOT NULL THEN 'account:' || m.account_id ELSE 'member:' || m.id END)
       ORDER BY m.is_host DESC, m.rowid`).bind(roomId),
     db.prepare(`SELECT msg.id, msg.member_id, msg.kind, msg.created_at, msg.edited_at, msg.pinned_at, msg.reply_to,
@@ -1435,7 +1649,11 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
       status: activeStatus(person, now),
       avatar: mediaUrl(person.avatar_key), banner: mediaUrl(person.banner_key), details: JSON.parse(person.details_json || '[]'),
       host: Boolean(person.is_host), online: person.last_seen > now - onlineWindow,
-      activity: person.share_activity ? { game: person.game, music: person.music, connections: connections(person) } : null,
+      activity: person.share_activity ? {
+        game: person.game, music: person.music, connections: connections(person),
+        spotifyTrack: person.spotify_track ? spotifyTrackUrl(person.spotify_track) : '',
+        spotifyArtist: person.spotify_artist || '', spotifyLive: spotifyEnabled && Boolean(person.spotify_connected),
+      } : null,
     })),
     earlier: incremental ? undefined : Boolean(earlier),
     messages: messages.map(({ image_key, image_alt, poll_options, poll_closed_at, ...message }) => ({
@@ -1586,11 +1804,13 @@ async function handleApi(request, env, ctx, url) {
   const assigned = reservedUsernames.has(assignment?.username) ? assignment.username : null;
   if (url.pathname === '/api/profile' && (method === 'GET' || method === 'POST')) return json(await ownProfile(env, ctx, request, account, admin, assigned));
   if (url.pathname === '/api/profile/username' && method === 'POST') return json(await ownProfile(env, ctx, request, account, admin, assigned, true));
+  if (url.pathname === spotifyCallback && method === 'GET') return spotifyConnection(request, env, url, account);
   if (account) {
     const profile = await env.DB.prepare('SELECT username FROM profiles WHERE account_id = ?').bind(account).first();
     if (assigned && profile?.username !== assigned) await assignReservedUsername(env.DB, account, assigned);
     else if (!profile?.username) throw usernameRequired();
   }
+  if (url.pathname.startsWith('/api/profile/spotify/')) return spotifyConnection(request, env, url, account);
   if (method === 'POST' && url.pathname === '/api/profile/status') return json(await updateStatus(env.DB, account, await body(request)));
   if (url.pathname === '/api/social' || url.pathname.startsWith('/api/social/')) return handleSocial(env.DB, request, url, account);
   if (method === 'POST' && url.pathname === '/api/rooms') return json(await createRoom(env.DB, await body(request), account), 201);
@@ -1620,6 +1840,7 @@ async function handleApi(request, env, ctx, url) {
     return json(await mediaGallery(env.DB, roomId, channel, before));
   }
   if (method === 'GET' && action === 'activity') return json(await roomActivity(env, roomId, url.searchParams.get('member')));
+  if (method === 'GET' && action === 'listening') return json(await roomListening(env, url, roomId, url.searchParams.get('member')));
   if (method === 'GET' && action === 'search') {
     const channel = url.searchParams.has('channel') ? await getChannel(env.DB, roomId, url.searchParams.get('channel')) : null;
     return json(await findMessages(env.DB, roomId, url.searchParams.get('q'), channel, url.searchParams.get('kind') ?? 'all'));
@@ -1630,7 +1851,7 @@ async function handleApi(request, env, ctx, url) {
     const after = Math.max(0, Number.parseInt(url.searchParams.get('after') ?? '0', 10) || 0);
     const through = url.searchParams.has('through') ? messageId(Number(url.searchParams.get('through'))) : null;
     const channel = await getChannel(env.DB, roomId, url.searchParams.get('channel'));
-    return json(await getRoom(env.DB, roomId, member, admin, channel, after, url.searchParams.get('revision'), through));
+    return json(await getRoom(env.DB, roomId, member, admin, channel, after, url.searchParams.get('revision'), through, Boolean(spotifyConfig(env, url))));
   }
   if (method === 'POST' && action === 'ai') return json(await configureAi(env, roomId, member, await body(request)));
   if (method === 'POST' && action === 'channels') return json(await createChannel(env.DB, roomId, member, admin, await body(request)), 201);

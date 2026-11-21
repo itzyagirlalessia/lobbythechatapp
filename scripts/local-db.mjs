@@ -13,6 +13,7 @@ export function openLocalDatabase(filename) {
     ['channel_settings', '0008_channel_tools.sql'],
     ['room_board_items', '0009_room_board.sql'],
     ['friendships', '0010_social.sql'],
+    ['spotify_connections', '0011_spotify_listening.sql'],
   ];
   for (const [table, file, column] of migrations) {
     const applied = column ? sqlite.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column)

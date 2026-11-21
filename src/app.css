@@ -427,6 +427,7 @@ dialog::backdrop { background: #15101cb5; backdrop-filter: blur(2px); }
 .profile-share { display: flex; align-items: flex-start; gap: 8px; padding: 8px 3px; font-size: 13px; cursor: pointer; }
 .profile-share input { margin: 2px 0 0; accent-color: var(--mint); }
 .profile-share small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.profile-spotify-live { display: grid; justify-items: start; gap: 8px; }
 .member-bio { padding: 12px 2px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .member-activity { display: flex; align-items: center; gap: 9px; margin-top: 8px; padding: 8px; border-radius: 9px; background: #30293e; }
 .activity-glyph { display: grid; place-items: center; flex-shrink: 0; width: 30px; height: 30px; color: var(--mint); background: #31423e; border-radius: 8px; }
@@ -434,6 +435,25 @@ dialog::backdrop { background: #15101cb5; backdrop-filter: blur(2px); }
 .member-activity small, .member-activity strong { display: block; overflow-wrap: anywhere; }
 .member-activity small { color: var(--muted); font-size: 11px; }
 .member-activity strong { margin-top: 2px; font-size: 13px; }
+.listening-card {
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid #59466d;
+  border-radius: 12px;
+  background: #252033;
+}
+.listening-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: var(--muted); font-size: .8125rem; }
+.listening-provider { display: block; width: 72px; height: auto; flex: 0 0 auto; margin: 4px; }
+.listening-track { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: center; color: inherit; text-decoration: none; border-radius: 6px; }
+.listening-cover, .listening-cover-placeholder { width: 56px; height: 56px; object-fit: contain; border-radius: 4px; }
+.listening-cover-placeholder { display: grid; place-items: center; background: #433554; color: #ddc6ff; }
+.listening-info { display: grid; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.listening-info strong { font-size: .9375rem; line-height: 1.25; }
+.listening-artist { color: var(--muted); font-size: .8125rem; }
+.listening-open { color: #d8befa; font-size: .8125rem; }
+.listening-track:hover .listening-open, .listening-track:focus-visible .listening-open { text-decoration: underline; }
+.listening-progress { display: grid; grid-template-columns: auto minmax(30px, 1fr) auto; align-items: center; gap: 8px; margin-top: 9px; color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.listening-progress progress { width: 100%; height: 8px; accent-color: var(--mint); }
 .profile-links { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .profile-links a { text-decoration: none; }
 

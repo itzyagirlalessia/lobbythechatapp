@@ -89,6 +89,12 @@ export async function showProfileEditor() {
 
   const gameHint = state.providers.steam ? 'Use your own public Steam profile for live game status.' : 'Steam profile link. Live game status needs site setup.';
   const musicHint = state.providers.lastfm ? 'Use your own Last.fm profile for live track updates.' : 'Last.fm profile link. Live track updates need site setup.';
+  const liveSpotify = state.providers.spotify || state.selfProfile.spotifyConnected ? `
+    <div class="profile-spotify-live">
+      <p class="profile-field-hint">Connect your Spotify account to show your current track and progress when someone in the room opens your profile while you’re online and sharing activity.</p>
+      <button type="button" class="button outline" id="connect-spotify" hidden>Save and connect Spotify</button>
+      <button type="button" class="button outline" id="disconnect-spotify" hidden>Disconnect Spotify</button>
+    </div>` : '';
   const fields = `
     <div class="profile-preview profile-card"><div class="profile-cover" id="preview-cover"></div><span class="avatar" id="preview-avatar"></span><div><strong id="preview-name"></strong><small id="preview-username" hidden></small></div></div>
     <fieldset class="profile-section"><legend>Pictures</legend>
@@ -111,17 +117,23 @@ export async function showProfileEditor() {
         <label class="field">Listening to<input name="music" maxlength="100" placeholder="Song and artist" autocomplete="off"></label>
       </div>
     </fieldset>
+    <fieldset class="profile-section"><legend>Spotify listening card</legend>
+      <label class="field">Spotify track link<input type="url" name="spotifyTrack" maxlength="500" placeholder="https://open.spotify.com/track/…" autocomplete="off"><small>In Spotify, open a song and choose Share, then Copy song link. Clear the link to remove the shared track.</small></label>
+      <label class="field">Artist (optional)<input name="spotifyArtist" maxlength="120" placeholder="Artist name" autocomplete="off"></label>
+      ${liveSpotify}
+    </fieldset>
     <fieldset class="profile-section"><legend>Connected profiles</legend>
       <label class="field">Steam<input name="steam" maxlength="500" placeholder="Steam profile link or SteamID64" autocomplete="off"><small>${gameHint}</small></label>
       <label class="field">Last.fm<input name="lastfm" maxlength="500" placeholder="Last.fm username or profile link" autocomplete="off"><small>${musicHint}</small></label>
       <label class="field">Spotify<input name="spotify" maxlength="500" placeholder="Spotify profile link" autocomplete="off"><small>Profile link</small></label>
     </fieldset>
-    <label class="profile-share"><input name="shareActivity" type="checkbox"><span><strong>Share activity and connected profiles</strong><small>People in your rooms can see your status and links. A live provider can check public activity while you’re active in a room.</small></span></label>`;
+    <label class="profile-share"><input name="shareActivity" type="checkbox"><span><strong>Share activity and connected profiles</strong><small>People in your rooms can see your game, music and profile links. Enabled services can check your activity while you’re online in a room.</small></span></label>`;
   showDialog('Edit your profile', dialogForm(fields, 'Save profile'));
   const form = $('dialog-body').querySelector('form');
   const originalUsername = state.selfProfile.username;
   const originalBase = originalUsername.split('#')[0];
-  const values = { ...state.selfProfile.connections, displayName: state.selfProfile.displayName || state.session?.room.name || saved.name || originalBase, username: originalBase, bio: state.selfProfile.bio, color: state.selfProfile.color, game: state.selfProfile.game, music: state.selfProfile.music };
+  const values = { ...state.selfProfile.connections, displayName: state.selfProfile.displayName || state.session?.room.name || saved.name || originalBase, username: originalBase, bio: state.selfProfile.bio, color: state.selfProfile.color, game: state.selfProfile.game, music: state.selfProfile.music,
+    spotifyTrack: state.selfProfile.spotifyTrack || '', spotifyArtist: state.selfProfile.spotifyArtist || '' };
   for (const [field, value] of Object.entries(values)) form.elements[field].value = value;
   form.elements.shareActivity.checked = state.selfProfile.shareActivity;
   if (state.selfProfile.usernameAssigned) {
@@ -146,8 +158,42 @@ export async function showProfileEditor() {
   const readAvatar = bindPicture(form, 'avatar', avatarSource, [256, 256], 180_000, source => { avatarSource = source; updatePreview(); });
   const readBanner = bindPicture(form, 'banner', coverSource, [1080, 360], 600_000, source => { coverSource = source; updateCover(); });
   const readDetails = profileDetailsEditor(form, state.selfProfile.details);
+  let connectRequested = false;
+  const connectSpotify = form.querySelector('#connect-spotify');
+  const disconnectSpotify = form.querySelector('#disconnect-spotify');
+  if (connectSpotify && disconnectSpotify) {
+    const updateConnection = () => {
+      const connected = state.selfProfile.spotifyConnected;
+      connectSpotify.hidden = !state.providers.spotify || connected;
+      disconnectSpotify.hidden = !connected;
+    };
+    updateConnection();
+    connectSpotify.addEventListener('click', () => {
+      if (form.querySelector('[type=submit]').disabled) return;
+      connectRequested = true;
+      form.requestSubmit();
+      connectRequested = false;
+    });
+    disconnectSpotify.addEventListener('click', async () => {
+      disconnectSpotify.disabled = true;
+      try {
+        await api('/profile/spotify/disconnect', { input: {} });
+        state.selfProfile.spotifyConnected = false;
+        updateConnection();
+        (connectSpotify.hidden ? form.elements.spotifyTrack : connectSpotify).focus();
+        if (state.session) void refresh(state.session);
+        toast('Spotify disconnected.');
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        disconnectSpotify.disabled = false;
+      }
+    });
+  }
   form.elements.displayName.focus();
   handleForm(async values => {
+    const connect = connectRequested;
+    if (connect && !values.has('shareActivity')) throw new Error('Turn on activity sharing before connecting Spotify.');
     const input = Object.fromEntries(values);
     if (input.username.trim().toLowerCase() === originalBase) delete input.username;
     input.color = Number(input.color);
@@ -155,6 +201,11 @@ export async function showProfileEditor() {
     input.details = readDetails();
     [input.avatarImage, input.bannerImage] = await Promise.all([readAvatar(), readBanner()]);
     applyOwnProfile(await api('/profile', { input }));
+    if (connect) {
+      const { url } = await api('/profile/spotify/connect', { input: {} });
+      if (form.isConnected) location.assign(url);
+      return;
+    }
     if (form.isConnected) closeDialog();
     toast('Profile saved.');
     if (state.session) {

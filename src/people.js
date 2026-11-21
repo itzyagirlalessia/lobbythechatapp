@@ -4,6 +4,7 @@ import { $, api, avatar, closeDialog, closeMemberCard, color, element, icon, sho
 import { paintCover } from './profile.js';
 import { showAiSettings, showRoomBan } from './room-settings.js';
 import { social } from './app.js';
+import { listeningSlot, refreshProfileListening } from './listening.js';
 
 let memberCardAnchorTop = 0;
 
@@ -38,6 +39,7 @@ export function showMemberProfile(member, trigger, isOwn = Boolean(member.mine) 
   renderMemberProfile(member);
   if (!popup.matches(':popover-open')) popup.showPopover();
   positionMemberCard();
+  void refreshProfileListening(state.session);
 }
 
 export function positionMemberCard() {
@@ -92,6 +94,8 @@ function renderMemberProfile(member) {
     row.append(glyph, info);
     details.append(row);
   }
+  const listening = listeningSlot(member, panel.querySelector('.listening-card'));
+  if (listening) details.append(listening);
   const links = element('div', 'profile-links');
   for (const [key, label] of [['steam', 'Steam'], ['lastfm', 'Last.fm'], ['spotify', 'Spotify']]) {
     const href = member.activity?.connections[key];
