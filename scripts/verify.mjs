@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { openLocalDatabase } from './local-db.mjs';
+import { latestRelease } from '../src/releases.js';
 import './build.mjs';
 
 const { default: app } = await import('../dist/server/index.js');
@@ -133,6 +134,20 @@ assert.match(onboarded.browserAccount, /^[a-f0-9]{64}$/);
 assert.equal((await request('/api/profile', null, null, 200, moderator)).browserAccount, onboarded.browserAccount);
 const anotherBrowser = await request('/api/profile', null, null, 200, namedAccount('different-user'));
 assert.notEqual(anotherBrowser.browserAccount, onboarded.browserAccount);
+const releasePath = '/api/profile/seen-release';
+const release = latestRelease.number;
+assert.equal(onboarded.seenRelease, 0);
+assert.equal(anotherBrowser.seenRelease, 0);
+await request(releasePath, { release }, null, 401);
+await request(releasePath, { release }, null, 409, namedAccount('different-user'));
+await request(releasePath, { release: release + 1 }, null, 400, plainBlair);
+await request(releasePath, { release: String(release) }, null, 400, plainBlair);
+assert.deepEqual(await Promise.all([
+  request(releasePath, { release }, null, 200, plainBlair),
+  request(releasePath, { release }, null, 200, plainBlair),
+]), [{ seen: true }, { seen: true }]);
+assert.equal((await request('/api/profile', null, null, 200, moderator)).seenRelease, release);
+assert.equal((await request('/api/profile', null, null, 200, namedAccount('different-user'))).seenRelease, 0);
 assert.deepEqual(await request(browserRooms, { rooms: [{ id: blair.id, access: blair.access }] }, null, 200, plainBlair), { rooms: [host.id] });
 assert.deepEqual(await request(browserRooms, { rooms: [{ id: blair.id, access: blair.access }] }, null, 200, namedAccount('different-user')), { rooms: [] });
 assert.deepEqual(await request(browserRooms, { rooms: [{ id: host.id, access: host.access }] }, null, 200, plainBlair), { rooms: [] });

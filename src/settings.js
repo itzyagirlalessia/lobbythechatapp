@@ -2,6 +2,7 @@
 import { preferences, saveStorage, saved, state } from './state.js';
 import { $, closeDialog, dialogForm, element, handleForm, icon, narrowScreen, showDialog, toast } from './ui.js';
 import { showStatusForm } from './profile.js';
+import { showReleaseNotes } from './release-notice.js';
 import { showChannelDetails } from './room-settings.js';
 import { showJoinVoice, showVoiceDetails } from './voice-ui.js';
 import { showBookmarks, showGallery, showMentions, showSearch } from './history.js';
@@ -12,7 +13,12 @@ export function showHelp() {
     <li>Create a room or join one from an invite.</li>
     <li>Use text channels to keep different conversations in the same room. Everyone in the room can read and send messages in its channels.</li>
     <li>The host can connect an OpenAI API key. Then anyone can mention <strong>@ChatGPT</strong> to get a shared reply.</li>
-  </ul>`);
+  </ul>
+  <div class="dialog-actions below"><button type="button" class="button outline" id="help-whats-new">What’s new</button></div>`);
+  $('help-whats-new').addEventListener('click', () => {
+    closeDialog();
+    showReleaseNotes();
+  });
 }
 
 export function toggleSidebar(open) {

@@ -387,6 +387,12 @@ dialog::backdrop { background: #15101cb5; backdrop-filter: blur(2px); }
 .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
 .dialog-head h2 { font-size: 23px; letter-spacing: -.55px; }
 .dialog-head .icon-button { margin: -4px -4px 0 0; flex-shrink: 0; }
+.release-head { align-items: flex-start; margin-bottom: 14px; }
+.release-date { display: block; color: var(--muted); font-size: .8125rem; margin-bottom: 3px; }
+.release-highlights { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.release-highlights li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 10px; border: 1px solid #493d58; border-radius: 10px; background: #241f32; }
+.release-highlights p { margin: 3px 0 0; color: var(--muted); font-size: .9375rem; line-height: 1.45; }
+.release-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: #483665; color: #decbf5; }
 #dialog-body p, #dialog-body li { color: var(--muted); line-height: 1.55; font-size: 14px; }
 #dialog-body .form-notice { font-size: 12px; }
 #dialog-body ul { padding-left: 19px; }

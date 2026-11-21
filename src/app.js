@@ -11,6 +11,7 @@ import { renderVoiceChannels, renderVoiceDock, showVoiceChannelForm, showVoiceDe
 import { positionMemberCard, refreshActivity, renderPeople, showMemberProfile, showPeople, updateAi } from './people.js';
 import { refreshProfileListening } from './listening.js';
 import { syncMessageDates } from './message-time.js';
+import { bindReleaseNotice, prepareReleaseNotice } from './release-notice.js';
 import { appendMessages, imageDrafts, jumpLatest, nearLatest, readVisibleMessages, renderAttachment, replyDrafts, showAttachImage, showMessageEditor, showPollCreator, showReplyComposer, updateHistoryNote, updateMessageAuthors } from './messages.js';
 import { highlightMessage, refreshMentions, renderMentionBadge, showBookmarks, showHistoryResult, showMentions, showPins, showSearch } from './history.js';
 import { chooseMention, clearMentionSuggestions, selectMentionSuggestion, sendMessage, sendTyping, setDraft, showMentionSuggestions, showTyping, storeDraft, updateComposer } from './composer.js';
@@ -570,7 +571,7 @@ $('mention').addEventListener('click', () => {
   setDraft(/(^|[^\w])@chatgpt\b/i.test(text) ? text : `@ChatGPT ${text}`);
 });
 document.addEventListener('keydown', event => {
-  if (state.usernameSetup || event.defaultPrevented || event.isComposing || event.repeat) return;
+  if (state.usernameSetup || $('release-dialog').open || event.defaultPrevented || event.isComposing || event.repeat) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault();
     showSwitcher();
@@ -590,6 +591,7 @@ window.addEventListener('pageshow', event => { if (event.persisted) location.rel
 
 syncMessageDates();
 bindSidebarResize();
+bindReleaseNotice();
 applyPreferences();
 void api('/profile').then(async data => {
   await loadAccountStorage(data.browserAccount, rooms => api('/profile/browser-rooms', { input: { rooms } }));
@@ -617,5 +619,6 @@ void api('/profile').then(async data => {
   else {
     restorePage();
     void syncAccountRooms();
+    prepareReleaseNotice(data);
   }
 }).catch(restorePage);

@@ -1,0 +1,1 @@
+ALTER TABLE profiles ADD COLUMN seen_release INTEGER NOT NULL DEFAULT 0;

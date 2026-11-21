@@ -20,6 +20,8 @@ const files = [
   ['/profile.js', 'profile.js', 'text/javascript; charset=utf-8'],
   ['/profile-design.js', 'profile-design.js', 'text/javascript; charset=utf-8'],
   ['/profile-studio.js', 'profile-studio.js', 'text/javascript; charset=utf-8'],
+  ['/releases.js', 'releases.js', 'text/javascript; charset=utf-8'],
+  ['/release-notice.js', 'release-notice.js', 'text/javascript; charset=utf-8'],
   ['/room-settings.js', 'room-settings.js', 'text/javascript; charset=utf-8'],
   ['/voice-ui.js', 'voice-ui.js', 'text/javascript; charset=utf-8'],
   ['/people.js', 'people.js', 'text/javascript; charset=utf-8'],
@@ -41,9 +43,11 @@ const entries = await Promise.all(files.map(async ([route, name, type]) => {
   return `${JSON.stringify(route)}: [${JSON.stringify(type)}, ${contents}, ${JSON.stringify(etag)}]`;
 }));
 const sharedProfileDesign = (await read('src/profile-design.js', 'utf8')).replace(/^export /gm, '');
+const sharedReleases = (await read('src/releases.js', 'utf8')).replace(/^export /gm, '');
 const worker = (await read('src/worker.js', 'utf8'))
-  .replace("import { assets } from './assets.js';", `const assets = {\n${entries.join(',\n')}\n};`)
-  .replace("import { normalizeProfileDesign, visibleProfileDesign, visibleProfileCode } from './profile-design.js';", () => sharedProfileDesign);
+  .replace("import { latestRelease } from './releases.js';", () => sharedReleases)
+  .replace("import { normalizeProfileDesign, visibleProfileDesign, visibleProfileCode } from './profile-design.js';", () => sharedProfileDesign)
+  .replace("import { assets } from './assets.js';", () => `const assets = {\n${entries.join(',\n')}\n};`);
 await mkdir(new URL('dist/server/', root), { recursive: true });
 await writeFile(new URL('dist/server/index.js', root), worker);
 console.log('Built Lobby.');
