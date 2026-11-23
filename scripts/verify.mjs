@@ -924,4 +924,10 @@ await request('/api/join', { name: 'Cap guest', invite: capRoom.invite }, null, 
 for (let i = 0; i < 98; i++) await request('/api/join', { name: `Guest ${i}`, invite: capRoom.invite }, null, 201);
 await request('/api/join', { name: 'One too many', invite: capRoom.invite }, null, 409);
 await request('/api/join', { name: 'Cap guest', invite: capRoom.invite }, null, 201, capGuest);
-console.log('Verified shared Spotify tracks, live Spotify permissions and privacy, room restoration, asset revalidation, member limits and presence, and existing chat features.');
+env.DUO_ALLOWED_EMAILS = 'aless@example.test, Tester@Example.test';
+assert.equal((await request('/api/profile', null, null, 403)).code, 'not_invited');
+assert.equal((await request('/api/profile', null, null, 403, moderator)).code, 'not_invited');
+await request('/api/profile', null, null, 200, namedAccount('allowed-tester', 'tester@example.test'));
+delete env.DUO_ALLOWED_EMAILS;
+await request('/api/profile', null, null, 200, moderator);
+console.log('Verified private-site allowlist, shared Spotify tracks, live Spotify permissions and privacy, room restoration, asset revalidation, member limits and presence, and existing chat features.');
