@@ -237,7 +237,8 @@ async function savePictures(env, ctx, fields, write) {
 
 async function servePicture(request, env, key) {
   const viewer = accountId(request);
-  if (!viewer || !env.DB || !env.BUCKET || !idPattern.test(key)) return new Response(null, { status: 404 });
+  const email = viewer && request.headers.get('oai-authenticated-user-email')?.trim().toLowerCase();
+  if (!viewer || !allowedVisitor(env, email) || !env.DB || !env.BUCKET || !idPattern.test(key)) return new Response(null, { status: 404 });
   const permitted = await env.DB.prepare(`
     SELECT 1 FROM profiles p WHERE (p.avatar_key = ? OR p.banner_key = ?) AND (p.account_id = ? OR EXISTS (
       SELECT 1 FROM members owner JOIN members guest ON guest.room_id = owner.room_id
@@ -699,6 +700,12 @@ async function roomActivity(env, roomId, memberId) {
     keys.lastfm && entry.lastfm ? cachedActivity(`lastfm:${entry.lastfm.toLowerCase()}`, () => lastfmTrack(env.DUO_LASTFM_API_KEY, entry.lastfm)) : '',
   ]);
   return { game, music };
+}
+
+// Optional extra lock for private sites such as Lobby Staging. Empty means no extra restriction.
+function allowedVisitor(env, email) {
+  const allowed = (env.DUO_ALLOWED_EMAILS ?? '').toLowerCase().split(',').map(entry => entry.trim()).filter(Boolean);
+  return !allowed.length || Boolean(email && allowed.includes(email));
 }
 
 function isAdmin(env, email, assignment) {
@@ -1878,6 +1885,7 @@ async function handleApi(request, env, ctx, url) {
   if (!env.DB) throw new AppError(503, 'Room storage is unavailable.');
   const account = accountId(request);
   const email = account && request.headers.get('oai-authenticated-user-email')?.trim().toLowerCase();
+  if (!allowedVisitor(env, email)) throw new AppError(403, 'This Lobby site is private. Ask the owner to add your account.', 'not_invited');
   const assignment = accountAssignment(env, email);
   const admin = isAdmin(env, email, assignment);
   const assigned = reservedUsernames.has(assignment?.username) ? assignment.username : null;

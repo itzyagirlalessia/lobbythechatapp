@@ -17,6 +17,10 @@ Codex uses the dedicated `lobby-staging` Sites checkout. In that checkout, `node
 
 Open a pull request from the tested `staging` commit into `main`. Check the exact commit being promoted if staging has advanced since testing. After approval, merge the release with a merge commit, then ask Codex to pull `main` and publish production from the `duo-chat` Sites checkout. Review pending database migrations before the production deploy.
 
+## Hotfixes
+
+A fix that goes straight to `main` must also reach `staging`. After merging it, open a pull request from `main` into `staging` (or merge `main` into a branch from `staging`), so staging never runs older code than production.
+
 ## Staging integrations
 
-Staging has its own `ROOM_KEY_ENCRYPTION` secret and uses `DUO_ENVIRONMENT=staging` for its label. Provider connections are optional. To enable live Spotify on staging, first register `https://lobby-staging.itzyagirlalessia.chatgpt.site/api/profile/spotify/callback` in the Spotify app, then set the staging Site's `DUO_SPOTIFY_CLIENT_ID` and `DUO_SPOTIFY_REDIRECT_URI` and publish again.
+Staging has its own `ROOM_KEY_ENCRYPTION` secret and uses `DUO_ENVIRONMENT=staging` for its label. Set `DUO_ALLOWED_EMAILS` on staging to the comma-separated emails of invited testers: the app then refuses every other account, even if the Sites access settings change. Leave it empty in production. Provider connections are optional. To enable live Spotify on staging, first register `https://lobby-staging.itzyagirlalessia.chatgpt.site/api/profile/spotify/callback` in the Spotify app, then set the staging Site's `DUO_SPOTIFY_CLIENT_ID` and `DUO_SPOTIFY_REDIRECT_URI` and publish again.

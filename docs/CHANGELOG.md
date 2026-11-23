@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-23
 
+- **[Wilmer]** Added an optional `DUO_ALLOWED_EMAILS` lock so only invited accounts can use a private site such as Lobby Staging.
 - **[itzyagirlalessia]** Added a private staging deployment workflow and a visible staging label in Lobby.
 
 ## 2026-11-22

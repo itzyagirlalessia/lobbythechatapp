@@ -80,12 +80,23 @@ export async function api(path, { access, input, keepalive = false } = {}) {
   const result = await response.json().catch(() => null);
   if (!response.ok || !result) {
     if (result?.code === 'username_required') showUsernameSetup();
+    if (result?.code === 'not_invited') showPrivateSite(result.error);
     const error = new Error(result?.error || 'Couldn’t reach the room. Try again in a moment.');
     error.status = response.status;
     error.code = result?.code;
     throw error;
   }
   return result;
+}
+
+let privateSiteShown = false;
+
+// Shown once when a private site (DUO_ALLOWED_EMAILS) refuses this account.
+function showPrivateSite(message) {
+  if (privateSiteShown) return;
+  privateSiteShown = true;
+  showDialog('Private site', '<p id="private-site-message"></p><div class="dialog-actions below"><a class="button primary" href="/signin-with-chatgpt" target="_top">Sign in with another account</a></div>');
+  $('private-site-message').textContent = message;
 }
 
 export function showDialog(title, markup) {
