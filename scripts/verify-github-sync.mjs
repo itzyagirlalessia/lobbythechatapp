@@ -21,10 +21,10 @@ function init(root) {
   git(root, 'config', 'commit.gpgsign', 'false');
   git(root, 'config', 'core.autocrlf', 'false');
 }
-function publish(message) {
+function publish(message, branch = 'main') {
   git(author, 'add', '-A');
   git(author, 'commit', '-m', message);
-  git(author, 'push', 'origin', 'main');
+  git(author, 'push', 'origin', branch);
   return git(author, 'rev-parse', 'HEAD');
 }
 const pull = options => pullGitHub({ root: site, url: remote, ...options });
@@ -69,6 +69,25 @@ try {
   assert.equal(readFileSync(join(site, '.env'), 'utf8'), 'local secret placeholder\n');
   assert.equal(readFileSync(join(site, applied.backup, 'src/app.js'), 'utf8'), 'original\r\n');
 
+  git(author, 'switch', '-c', 'staging', base);
+  write(author, 'src/app.js', 'staging preview\n');
+  const staged = publish('Staging contribution', 'staging');
+  git(author, 'switch', 'main');
+  const stageSite = join(directory, 'staging-site');
+  init(stageSite);
+  write(stageSite, '.openai/github-sync.json', '{"branch":"staging"}\n');
+  write(stageSite, '.openai/hosting.json', 'staging hosting configuration\n');
+  write(stageSite, 'src/app.js', 'original\n');
+  const pullStaging = options => pullGitHub({ root: stageSite, url: remote, ...options });
+  assert.equal(pullStaging({ initialize: base }).branch, 'staging');
+  assert.equal(pullStaging({ mode: 'apply' }).head, staged);
+  assert.equal(readFileSync(join(stageSite, 'src/app.js'), 'utf8'), 'staging preview\n');
+  assert.equal(pull().head, update);
+  assert.equal(readFileSync(join(site, 'src/app.js'), 'utf8'), 'collaborator update\n');
+  assert.equal(readFileSync(join(stageSite, '.openai/hosting.json'), 'utf8'), 'staging hosting configuration\n');
+  write(stageSite, '.openai/github-sync.json', '{"branch":"main"}\n');
+  assert.throws(() => pullStaging({ mode: 'apply' }), /does not match this repository and branch/);
+
   write(site, 'src/app.js', 'local edit\n');
   write(author, 'src/app.js', 'different remote edit\n');
   write(author, 'src/another.js', 'must wait for conflict resolution\n');
@@ -104,7 +123,7 @@ try {
   assert.deepEqual(renamed.conflicts.sort(), ['src/Another.js', 'src/another.js']);
   assert.equal(renamed.applied, undefined);
   assert.equal(readFileSync(join(site, 'src/another.js'), 'utf8'), 'must wait for conflict resolution\n');
-  console.log('Verified GitHub pulls across separate histories, new and deleted files, local edits, conflict protection, backups, private paths, symbolic links, and case-only renames.');
+  console.log('Verified isolated main and staging pulls, new and deleted files, conflict protection, backups, private paths, symbolic links, and case-only renames.');
 } finally {
   const target = resolve(directory);
   if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith('duo-github-sync-')) throw new Error('Refusing to clean up an unexpected test directory.');

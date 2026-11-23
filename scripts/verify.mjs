@@ -111,6 +111,10 @@ async function request(path, input, access, expected = 200, identity = identitie
 }
 
 const host = await request('/api/rooms', { name: 'Alex', title: 'Friday game night' }, null, 201);
+assert.equal((await request('/api/profile')).environment, 'production');
+env.DUO_ENVIRONMENT = 'staging';
+assert.equal((await request('/api/profile')).environment, 'staging');
+delete env.DUO_ENVIRONMENT;
 const roomPath = `/api/rooms/${host.id}`;
 await request(roomPath, null, null, 401);
 await request('/api/join', { name: 'Cameron', invite: 'invalid' }, null, 404);

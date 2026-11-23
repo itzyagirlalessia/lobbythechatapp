@@ -51,11 +51,14 @@ export function pullGitHub({ root = projectRoot, url = repositoryUrl, mode = 'ch
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
   const readGit = (commit, path) => execFileSync('git', ['show', `${commit}:${path}`], { cwd: root, maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   if (resolve(git('rev-parse', '--show-toplevel').trim()) !== root) throw new Error('Run this helper from its own project checkout.');
+  const configPath = safePath(root, '.openai/github-sync.json');
+  const branch = existsSync(configPath) ? JSON.parse(readFileSync(configPath, 'utf8')).branch : 'main';
+  if (branch !== 'main' && branch !== 'staging') throw new Error('The checkout must pull either main or staging.');
   const remotes = git('remote').trim().split(/\r?\n/);
   if (!remotes.includes('github')) git('remote', 'add', 'github', url);
   if (git('remote', 'get-url', 'github').trim() !== url) throw new Error('The github remote points somewhere else. Review it before pulling.');
-  if (fetch) git('fetch', '--no-tags', 'github', 'main');
-  const head = git('rev-parse', 'refs/remotes/github/main').trim();
+  if (fetch) git('fetch', '--no-tags', 'github', branch);
+  const head = git('rev-parse', `refs/remotes/github/${branch}`).trim();
   const stateFile = safePath(root, '.local/github-sync.json');
   mkdirSync(dirname(stateFile), { recursive: true });
   const lock = safePath(root, '.local/github-sync.lock');
@@ -65,12 +68,12 @@ export function pullGitHub({ root = projectRoot, url = repositoryUrl, mode = 'ch
       if (existsSync(stateFile)) throw new Error('The pull baseline is already initialized.');
       if (!/^[a-f0-9]{40}$/.test(initialize)) throw new Error('Use the full SHA of the last shared GitHub commit.');
       git('merge-base', '--is-ancestor', initialize, head);
-      writeFileSync(stateFile, JSON.stringify({ repository: url, branch: 'main', commit: initialize }, null, 2) + '\n', { flag: 'wx' });
-      return { initialized: initialize, head };
+      writeFileSync(stateFile, JSON.stringify({ repository: url, branch, commit: initialize }, null, 2) + '\n', { flag: 'wx' });
+      return { branch, initialized: initialize, head };
     }
     if (!existsSync(stateFile)) throw new Error('Initialize once with --initialize <last-shared-commit> before pulling.');
     const state = JSON.parse(readFileSync(stateFile, 'utf8'));
-    if (state.repository !== url || state.branch !== 'main' || !/^[a-f0-9]{40}$/.test(state.commit)) throw new Error('The saved pull baseline does not match this repository.');
+    if (state.repository !== url || state.branch !== branch || !/^[a-f0-9]{40}$/.test(state.commit)) throw new Error('The saved pull baseline does not match this repository and branch.');
     git('merge-base', '--is-ancestor', state.commit, head);
     const tree = commit => new Map(git('ls-tree', '-r', '-z', '--full-tree', commit).split('\0').filter(Boolean).map(entry => {
       const split = entry.indexOf('\t');
@@ -103,7 +106,7 @@ export function pullGitHub({ root = projectRoot, url = repositoryUrl, mode = 'ch
       if (!equal(local, before)) { conflicts.push(path); continue; }
       changes.push({ path, local, after });
     }
-    const result = { base: state.commit, head, changes: changes.map(c => ({ path: c.path, action: c.after === null ? 'delete' : c.local === null ? 'add' : 'update' })), conflicts, skipped };
+    const result = { branch, base: state.commit, head, changes: changes.map(c => ({ path: c.path, action: c.after === null ? 'delete' : c.local === null ? 'add' : 'update' })), conflicts, skipped };
     if (mode !== 'apply' || conflicts.length) return result;
     const backup = `.local/github-backups/${Date.now()}-${randomUUID()}`;
     const applied = [];
