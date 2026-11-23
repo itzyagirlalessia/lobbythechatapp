@@ -20,7 +20,7 @@ if (!key) {
   }
   key = readFileSync(keyFile, 'utf8');
 }
-const env = { DB: openLocalDatabase(fileURLToPath(new URL('duo.sqlite', local))), ROOM_KEY_ENCRYPTION: key };
+const env = { DB: openLocalDatabase(fileURLToPath(new URL('duo.sqlite', local))), ROOM_KEY_ENCRYPTION: key, DUO_ENVIRONMENT: process.env.DUO_ENVIRONMENT };
 const context = { waitUntil: task => task.catch(() => console.error('A background reply could not be saved.')) };
 const port = Number(process.env.DUO_PORT || 3957);
 

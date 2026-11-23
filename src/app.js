@@ -594,6 +594,10 @@ bindSidebarResize();
 bindReleaseNotice();
 applyPreferences();
 void api('/profile').then(async data => {
+  if (data.environment === 'staging') {
+    $('staging-label').hidden = false;
+    document.title = 'Lobby Staging';
+  }
   await loadAccountStorage(data.browserAccount, rooms => api('/profile/browser-rooms', { input: { rooms } }));
   saveStorage();
   applyPreferences();

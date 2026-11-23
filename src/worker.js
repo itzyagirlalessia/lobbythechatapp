@@ -370,7 +370,8 @@ async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly =
       profile.spotifyConnected = Boolean(connected);
     }
     const browserAccount = id ? await hash('lobby-browser-account:' + id) : null;
-    return { admin, signedIn: Boolean(id), profile, providers, browserAccount, seenRelease: entry?.seen_release ?? 0 };
+    return { admin, signedIn: Boolean(id), profile, providers, browserAccount, seenRelease: entry?.seen_release ?? 0,
+      environment: env.DUO_ENVIRONMENT === 'staging' ? 'staging' : 'production' };
   };
   let previous = id && await env.DB.prepare('SELECT * FROM profiles WHERE account_id = ?').bind(id).first();
   if (assigned && previous?.username !== assigned) previous = await assignReservedUsername(env.DB, id, assigned);

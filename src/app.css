@@ -218,6 +218,7 @@ h1, h2 { font-family: var(--face); }
 .channel-action { width: 34px; }
 .topbar-title { font-weight: 700; font-size: 15px; }
 .topbar-title #page-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.staging-label { flex-shrink: 0; padding: 3px 6px; border: 1px solid #906d42; border-radius: 6px; background: #44321e; color: #ffe0af; font-size: .75rem; }
 #crumb-icon { color: #b59bd2; }
 .home-view { width: min(1260px, 100%); margin: 0 auto; padding: 34px 34px 54px; }
 .welcome { position: relative; isolation: isolate; overflow: hidden; display: grid; grid-template-columns: 1.14fr .86fr; align-items: center; min-height: 360px; border: 1px solid #514064; border-radius: 19px; padding: 39px 43px; background: radial-gradient(ellipse at 80% 70%,#463263 0%,transparent 54%), linear-gradient(110deg,#2b223d 38%,#312445 100%); }
