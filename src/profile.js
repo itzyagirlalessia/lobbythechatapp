@@ -6,7 +6,7 @@ import { syncAccountRooms } from './rooms.js';
 import { toggleSidebar } from './settings.js';
 import { prepareReleaseNotice } from './release-notice.js';
 import { refresh, restorePage, social } from './app.js';
-import { applyProfileDesign, bindProfileStudio, codeFields, designFields, profileFacts, renderProfileCode } from './profile-studio.js';
+import { applyProfileDesign, bindProfileStudio, codeFields, designFields, profileFacts, renderProfileCard, renderProfileCode } from './profile-studio.js';
 
 export function applyOwnProfile(data) {
   state.admin = data.admin;
@@ -138,7 +138,8 @@ export async function showProfileEditor() {
     <aside class="studio-preview" aria-label="Live profile preview">
       <span class="studio-preview-label">Live preview</span>
       <div class="studio-card" id="studio-card">
-        <header class="member-popup-header"><div class="profile-cover" id="preview-cover"></div>
+        <div class="profile-card-frame" id="preview-card-frame" hidden></div>
+        <header class="member-popup-header" id="preview-header"><div class="profile-cover" id="preview-cover"></div>
           <span class="avatar online" id="preview-avatar"></span>
           <h3 class="member-popup-name" id="preview-name"></h3>
           <p class="member-popup-username" id="preview-username" hidden></p>
@@ -209,6 +210,9 @@ export async function showProfileEditor() {
   const bioPreview = form.querySelector('#preview-bio');
   const factsPreview = form.querySelector('#preview-facts');
   const codePreview = form.querySelector('#preview-code');
+  const cardFramePreview = form.querySelector('#preview-card-frame');
+  const headerPreview = form.querySelector('#preview-header');
+  const detailsPreview = form.querySelector('#preview-details');
   const readDetails = profileDetailsEditor(form, state.selfProfile.details);
   const readDesign = bindProfileStudio(form, state.selfProfile.design);
   let previousName, previousColor, previousAvatar, previousCover;
@@ -234,6 +238,12 @@ export async function showProfileEditor() {
     const design = readDesign();
     applyProfileDesign(card, design);
     renderProfileCode(codePreview, design);
+    const activities = [['Playing', form.elements.game.value.trim()], ['Listening to', form.elements.music.value.trim()]]
+      .filter(([, title]) => title).map(([label, title]) => ({ label, title }));
+    const wholeCard = renderProfileCard(cardFramePreview, design, { name, username: username.textContent, avatar: avatarSource, banner: coverSource,
+      online: true, bio: bioPreview.textContent, details: readDetails(), activities });
+    headerPreview.hidden = wholeCard;
+    detailsPreview.hidden = wholeCard;
   };
   form.addEventListener('input', updatePreview);
   form.addEventListener('change', updatePreview);

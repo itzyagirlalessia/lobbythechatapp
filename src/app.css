@@ -539,6 +539,14 @@ dialog::backdrop { background: #15101cb5; backdrop-filter: blur(2px); }
 .profile-designed .profile-status { color: #f5effc; }
 .profile-code-container { margin-top: 10px; min-width: 0; }
 .profile-code-frame { display: block; width: 100%; border: 0; border-radius: 8px; color-scheme: normal; }
+.profile-card-frame { min-width: 0; }
+.profile-card-frame .profile-code-frame { border-radius: 0; }
+.member-card-trust { display: grid; gap: 2px; padding: 10px 15px 12px; border-top: 1px solid var(--design-border, #4b3c5a); }
+.member-card-trust .member-popup-name { margin: 0; font-size: 15px; letter-spacing: 0; }
+.member-card-trust .member-popup-username { margin: 0; font-size: 12px; }
+.member-card-trust .member-popup-meta { margin-top: 4px; }
+.studio-code [data-scope-hint] { color: var(--muted); font-size: .875rem; }
+.studio-code [data-scope-hint] code { font-size: .8125rem; }
 #dialog:has(.profile-studio) { width: min(860px, calc(100vw - 24px)); }
 #dialog:has(.profile-studio) .dialog-form > .dialog-actions {
   position: sticky;
