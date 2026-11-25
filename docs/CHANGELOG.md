@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[itzyagirlalessia]** Added support for granting additional Lobby admins while preserving existing role and username settings.
 - **[itzyagirlalessia]** Fixed shared message links on fresh browsers, reciprocal friend request feedback, losing new DM drafts after a slow send, and staging tab titles.
 
 ## 2026-11-23

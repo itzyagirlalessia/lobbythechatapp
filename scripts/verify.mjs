@@ -263,6 +263,14 @@ for (const [email, username] of [['romee', 'romeestorm'], ['dex', 'tydex'], ['el
   await request('/api/rooms', { name: `${username.toUpperCase()}#0000`, title: 'Reserved name' }, null, 400);
   assert.equal((await request(roomPath, null, membership.access, 200, account)).members.find(person => person.id === membership.memberId).username, `${username}#0000`);
 }
+env.DUO_ADDITIONAL_ADMIN_EMAILS = ' other-admin@example.test, TWINKIE@EXAMPLE.TEST ';
+const addedAdmin = await request('/api/profile', null, null, 200, namedAccount('test-twinkie', 'twinkie@example.test'));
+assert.equal(addedAdmin.profile.username, 'twinkieletissier#0000');
+assert.equal(addedAdmin.admin, true);
+assert.equal((await request('/api/profile', null, null, 200, moderator)).admin, true);
+assert.equal((await request('/api/profile', null, null, 200, aless)).admin, true);
+assert.equal((await request('/api/profile', null, null, 200, namedAccount('test-welton', 'welton@example.test'))).admin, false);
+delete env.DUO_ADDITIONAL_ADMIN_EMAILS;
 const bodhi = namedAccount('test-bodhi', ' BODHI@EXAMPLE.TEST ');
 const bodhiMembership = await request('/api/join', { name: 'Bodhi', invite: host.invite }, null, 201, bodhi);
 const bodhiProfiles = await Promise.all([
