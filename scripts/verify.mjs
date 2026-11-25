@@ -439,11 +439,19 @@ assert.deepEqual(await request('/api/rooms/' + otherRoom.id + '/profile-code?mem
 const savedDraft = (await request('/api/profile', { ...profile, design: { ...style, customEnabled: false } }, null, 200, plainBlair)).profile.design;
 assert.equal(savedDraft.html, html);
 assert.deepEqual(await request(profileCodePath, null, host.access), { code: null });
+assert.equal(savedDraft.customScope, 'section');
+const cardOnlyCss = (await request('/api/profile', { ...profile, design: { ...style, customScope: 'card', html: '' } }, null, 200, plainBlair)).profile.design;
+assert.equal(cardOnlyCss.customScope, 'card');
+assert.equal((await request(roomPath, null, host.access)).members.find(person => person.id === blair.memberId).design.customScope, 'card');
+assert.deepEqual(await request(profileCodePath, null, host.access), { code: { html: '', css } });
+assert.equal((await request('/api/profile', { ...profile, design: { ...style, customScope: 'everything', html: '' } }, null, 200, plainBlair)).profile.design.customScope, 'section');
+assert.deepEqual(await request(profileCodePath, null, host.access), { code: null });
 await request('/api/profile', { ...profile, design: null }, null, 200, plainBlair);
 const profileCanvas = await app.fetch(new Request('http://127.0.0.1/profile-canvas'), env, context);
 assert.equal(profileCanvas.status, 200);
 assert.match(profileCanvas.headers.get('Content-Security-Policy'), /default-src 'none'/);
 assert.match(profileCanvas.headers.get('Content-Security-Policy'), /form-action 'none'/);
+assert.match(profileCanvas.headers.get('Content-Security-Policy'), /img-src blob:;/);
 
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO/a9xkAAAAASUVORK5CYII=';
 const details = [{ label: 'Interests', value: 'Puzzle games' }, { label: 'Languages', value: 'English and Dutch' }];

@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[Wilmer]** Profile Studio can now style the whole profile card with HTML/CSS (sandboxed), while the real name, badges and buttons stay outside it.
 - **[itzyagirlalessia]** Promoted Wilmer’s Profile Studio code switch and two-user browser test to the main release.
 - **[Wilmer]** Profile Studio's HTML / CSS tab now shows one code box with an HTML / CSS switch instead of two boxes.
 - **[Wilmer]** Added the optional browser smoke test in `scripts/smoke/` (two signed-in users through the real UI), documented in the README.
