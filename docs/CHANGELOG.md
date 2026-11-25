@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[itzyagirlalessia]** Made the Lobby Admin badge visible to everyone in a room’s People list and on admin profile cards, including profiles opened through Friends and DMs.
 - **[itzyagirlalessia]** Added support for granting additional Lobby admins while preserving existing role and username settings.
 
 ## 2026-11-22
