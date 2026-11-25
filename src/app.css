@@ -491,6 +491,7 @@ dialog::backdrop { background: #15101cb5; backdrop-filter: blur(2px); }
 .member-presence { color: var(--muted); }
 .member-presence.online { color: var(--mint); }
 .member-role { padding: 3px 6px; border: 1px solid #655078; border-radius: 6px; color: #e8d7f7; background: #3b2e4c; }
+.roster-role { display: inline-block; margin-top: 3px; padding: 1px 5px; font-size: 11px; }
 .member-popup-details { padding: 0 15px 13px; }
 .member-popup-details .member-bio { border-top: 1px solid #50425f; padding: 9px 0 2px; font-size: 13px; line-height: 1.5; }
 .member-popup-details .profile-facts { margin: 7px 0 0; }

@@ -55,8 +55,7 @@ function renderMemberProfile(member) {
   const panel = $('member-profile');
   if (panel?.dataset.memberId !== member.id) return;
   const activities = activityRows(member);
-  const isAdmin = panel.dataset.own === 'true' && state.admin;
-  const signature = JSON.stringify([member, activities, isAdmin]);
+  const signature = JSON.stringify([member, activities, panel.dataset.own]);
   if (panel.dataset.profileSignature === signature) return;
   panel.dataset.profileSignature = signature;
   applyProfileDesign($('member-card'), member.design);
@@ -70,7 +69,7 @@ function renderMemberProfile(member) {
   const meta = element('div', 'member-popup-meta');
   meta.append(element('span', member.online ? 'member-presence online' : 'member-presence', member.online ? 'Online' : 'Away'));
   if (member.host) meta.append(element('span', 'member-role', 'Room host'));
-  if (isAdmin) meta.append(element('span', 'member-role', 'Lobby admin'));
+  if (member.admin) meta.append(element('span', 'member-role', 'Lobby Admin'));
   header.append(cover, picture, title);
   if (member.username) header.append(element('p', 'member-popup-username', member.username));
   header.append(meta);
@@ -143,13 +142,14 @@ function makePeople(members) {
   return members.map(member => {
     const node = element('button', 'person');
     node.dataset.memberId = member.id;
-    node.setAttribute('aria-label', `View ${member.name}’s profile`);
+    node.setAttribute('aria-label', `View ${member.name}’s profile${member.admin ? ', Lobby Admin' : ''}`);
     node.setAttribute('aria-haspopup', 'dialog');
     node.addEventListener('click', () => showMemberProfile(member, node));
     const initials = avatar(member.name, member.id, member.color, member.avatar);
     initials.classList.toggle('online', member.online);
     const detail = element('span', 'person-detail');
     detail.append(element('strong', '', member.name + (member.mine || state.session.room.memberId === member.id ? ' (you)' : '')));
+    if (member.admin) detail.append(element('span', 'member-role roster-role', 'Lobby Admin'));
     detail.append(element('small', '', `${member.host ? 'Host · ' : ''}${member.online ? 'Online' : 'Away'}`));
     if (member.status) detail.append(element('small', 'person-status', member.status));
     for (const activity of activityRows(member)) {
