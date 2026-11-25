@@ -709,8 +709,9 @@ function allowedVisitor(env, email) {
 }
 
 function isAdmin(env, email, assignment) {
+  const emailLists = [env.DUO_ADMIN_EMAILS, env.DUO_ADDITIONAL_ADMIN_EMAILS];
   return Boolean(email && (assignment?.admin === true
-    || (env.DUO_ADMIN_EMAILS ?? '').toLowerCase().split(',').some(entry => entry.trim() === email)));
+    || emailLists.some(list => list?.toLowerCase().split(',').some(entry => entry.trim() === email))));
 }
 
 function requireModerator(member, admin) {
