@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[itzyagirlalessia]** Promoted Wilmer’s whole-card HTML/CSS option to the main site.
 - **[Wilmer]** Profile Studio can now style the whole profile card with HTML/CSS (sandboxed), while the real name, badges and buttons stay outside it.
 - **[itzyagirlalessia]** Room mentions show the selected member’s display name in drafts and messages and deliver to their account.
 - **[itzyagirlalessia]** Promoted Wilmer’s Profile Studio code switch and two-user browser test to the main release.
