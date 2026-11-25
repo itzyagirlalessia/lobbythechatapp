@@ -67,7 +67,7 @@ node scripts/smoke/server.mjs 3999   # terminal 1: builds the checkout, empty in
 node scripts/smoke/run.mjs 3999      # terminal 2: ends with "RESULT: all steps passed"
 ```
 
-It uses installed Chrome by default. Set `BROWSER_CHANNEL=msedge` for Edge, or `CHROME_PATH=<browser executable>` for another Chromium. Add `HEADED=1` to watch. Start the server with `ALLOWED=alice@example.test ENVIRONMENT=staging` to test the private-site lock. Failed steps save screenshots to `.local/smoke/`.
+It uses installed Chrome by default. Set `BROWSER_CHANNEL=msedge` for Edge, or `CHROME_PATH=<browser executable>` for another Chromium. Add `HEADED=1` to watch. On the staging branch, start the server with `ALLOWED=alice@example.test ENVIRONMENT=staging` to test the private-site lock. Failed steps save screenshots to `.local/smoke/`.
 
 ## Deployment requirements
 
