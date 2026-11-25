@@ -65,7 +65,7 @@ export function showUsernameSetup() {
     $('close-dialog').hidden = false;
     closeDialog();
     if (state.session && !location.hash) void refresh(state.session);
-    else restorePage();
+    else await restorePage();
     void syncAccountRooms();
     prepareReleaseNotice(profile);
   });

@@ -71,6 +71,7 @@ export function saveStorage() {
 // Values that several modules read and replace. Always use state.session (etc.), never a local copy.
 export const state = {
   admin: false,
+  staging: false,
   selfProfile: undefined,
   providers: {},
   session: undefined,

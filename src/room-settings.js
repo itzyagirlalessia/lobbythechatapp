@@ -6,7 +6,7 @@ import { showInvite } from './rooms.js';
 import { accentOptions } from './profile.js';
 import { updateAi } from './people.js';
 import { showGallery, showPins } from './history.js';
-import { openRoom, refresh, renderChannels, renderNav, roomBoard } from './app.js';
+import { openRoom, refresh, renderChannels, renderNav, roomBoard, updatePageTitle } from './app.js';
 import { renderVoiceChannels } from './voice-ui.js';
 
 export function showChannelForm() {
@@ -189,7 +189,7 @@ export function applyRoomIdentity(room, identity) {
   saveStorage();
   if (state.session?.room.id === room.id) {
     $('room-title').textContent = `${room.title} · #${state.session.channel}`;
-    document.title = `#${state.session.channel} · ${room.title} · Lobby`;
+    updatePageTitle();
     renderNav();
   }
 }

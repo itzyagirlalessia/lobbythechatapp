@@ -125,6 +125,7 @@ export function createSocial(ui) {
     const result = await api('/social/friends', { input: { username } });
     toast(result.state === 'accepted' ? 'You’re now friends.' : 'Friend request sent.');
     await refresh(true);
+    return result.state;
   }
 
   async function startDirect(username) {
@@ -299,10 +300,10 @@ export function createSocial(ui) {
     button.disabled = true;
     $('add-friend-feedback').textContent = '';
     try {
-      await addFriend(input.value);
+      const accepted = await addFriend(input.value) === 'accepted';
       input.value = '';
-      showFriends('requests');
-      $('add-friend-feedback').textContent = 'Request sent. They can accept from their Requests tab.';
+      showFriends(accepted ? 'friends' : 'requests');
+      $('add-friend-feedback').textContent = accepted ? 'You’re now friends.' : 'Request sent. They can accept from their Requests tab.';
     } catch (error) { $('add-friend-feedback').textContent = error.message; }
     finally { button.disabled = false; }
   });
@@ -323,7 +324,8 @@ export function createSocial(ui) {
   });
   $('direct-composer').addEventListener('submit', async event => {
     event.preventDefault();
-    const id = active, text = $('direct-input').value.trim();
+    const id = active, draft = $('direct-input').value;
+    const text = draft.trim();
     if (!id || !canSend || !text || $('direct-composer').dataset.sending === 'true') return;
     const previous = failedRequests.get(id);
     const requestId = previous?.text === text ? previous.requestId : crypto.randomUUID();
@@ -333,8 +335,8 @@ export function createSocial(ui) {
     try {
       await api(`/social/direct/${id}/messages`, { input: { id: requestId, text } });
       failedRequests.delete(id);
-      drafts.delete(id);
-      if (active === id && $('direct-input').value.trim() === text) $('direct-input').value = '';
+      if (drafts.get(id) === draft) drafts.delete(id);
+      if (active === id && $('direct-input').value === draft) $('direct-input').value = '';
       await refreshHistory(id, true);
       await refresh(true);
     } catch (error) { toast(error.message); }
