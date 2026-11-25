@@ -57,6 +57,18 @@ node scripts/preview.mjs
 
 The local preview runs at http://127.0.0.1:3957. It supports anonymous room testing and intentionally strips trusted identity headers. Hosted account profiles, friends, DMs, and uploads require the hosting integrations below.
 
+### Browser smoke test (optional)
+
+`scripts/smoke/` drives two signed-in users through the real UI in a browser: username setup, rooms, chat both ways, invites, message actions, dialogs, channels, friends, and room restore. It is a dev-only tool with its own `playwright-core` dependency; the app itself still has none. Its test server trusts a `testuser` cookie as the signed-in identity, so run it only on your own machine and never deploy it.
+
+```sh
+cd scripts/smoke && npm ci && cd ../..
+node scripts/smoke/server.mjs 3999   # terminal 1: builds the checkout, empty in-memory database
+node scripts/smoke/run.mjs 3999      # terminal 2: ends with "RESULT: all steps passed"
+```
+
+It uses installed Chrome by default. Set `BROWSER_CHANNEL=msedge` for Edge, or `CHROME_PATH=<browser executable>` for another Chromium. Add `HEADED=1` to watch. Start the server with `ALLOWED=alice@example.test ENVIRONMENT=staging` to test the private-site lock. Failed steps save screenshots to `.local/smoke/`.
+
 ## Deployment requirements
 
 GitHub Pages serves static files and cannot run this app's server or database. The full app needs:

@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[Wilmer]** Added the optional browser smoke test in `scripts/smoke/` (two signed-in users through the real UI), documented in the README.
 - **[itzyagirlalessia]** Made the Lobby Admin badge visible to everyone in a room’s People list and on admin profile cards, including profiles opened through Friends and DMs.
 - **[itzyagirlalessia]** Added support for granting additional Lobby admins while preserving existing role and username settings.
 - **[itzyagirlalessia]** Fixed shared message links on fresh browsers, reciprocal friend request feedback, losing new DM drafts after a slow send, and staging tab titles.
