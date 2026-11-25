@@ -566,6 +566,9 @@ dialog::backdrop { background: #15101cb5; backdrop-filter: blur(2px); }
 .studio-colors input[type="color"] { width: 100%; height: 39px; cursor: pointer; }
 .studio-code textarea { font-family: ui-monospace, Consolas, monospace; font-size: .875rem; line-height: 1.55; }
 .studio-code .profile-share { margin: 6px 0; }
+.studio-code-switch { justify-self: start; margin-bottom: 0; }
+.studio-code-switch button { flex: 0 0 auto; min-width: 72px; }
+.studio-code-switch button[aria-pressed="true"] { background: #46365b; color: var(--ink); font-weight: 700; }
 .field input[type="range"] { width: 100%; padding: 0; accent-color: var(--mint); }
 
 .legal-header { background: var(--nav); border-bottom: 1px solid var(--line); }
