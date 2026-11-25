@@ -27,6 +27,7 @@ const files = [
   ['/people.js', 'people.js', 'text/javascript; charset=utf-8'],
   ['/listening.js', 'listening.js', 'text/javascript; charset=utf-8'],
   ['/messages.js', 'messages.js', 'text/javascript; charset=utf-8'],
+  ['/mentions.js', 'mentions.js', 'text/javascript; charset=utf-8'],
   ['/message-time.js', 'message-time.js', 'text/javascript; charset=utf-8'],
   ['/history.js', 'history.js', 'text/javascript; charset=utf-8'],
   ['/composer.js', 'composer.js', 'text/javascript; charset=utf-8'],

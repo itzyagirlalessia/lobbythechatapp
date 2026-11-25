@@ -1,6 +1,7 @@
 // Rendering messages and their actions: replies, reactions, polls, images, edits, deletes, saved messages.
 import { bindPicture, pictureField } from './pictures.js';
 import { formatContent } from './formatting.js';
+import { displayMentions, editMentionText, encodeMentions, roomLinks } from './mentions.js';
 import { messageTime } from './message-time.js';
 import { saveStorage, saved, state } from './state.js';
 import { $, api, avatar, closeDialog, dialogForm, element, handleForm, icon, pictureImage, showDialog, toast, updateAvatar } from './ui.js';
@@ -37,11 +38,13 @@ export function showMessageEditor(current, message) {
   if (state.session !== current) return;
   showDialog('Edit message', dialogForm(`<label class="field">${message.image ? 'Caption' : 'Message'}<textarea name="text" ${message.image ? '' : 'required'} maxlength="4000" rows="5"></textarea></label>`, 'Save changes'));
   const form = $('dialog-body').querySelector('form');
-  form.elements.text.value = message.text;
+  const draft = displayMentions(message.text, current.members);
+  form.elements.text.value = draft.text;
+  form.elements.text.addEventListener('input', ({ target }) => editMentionText(draft, target.value, target.selectionStart));
   form.elements.text.focus();
-  form.elements.text.setSelectionRange(message.text.length, message.text.length);
-  handleForm(async data => {
-    await api(`/rooms/${current.room.id}/edit-message`, { access: current.room.access, input: { messageId: message.id, text: data.get('text') } });
+  form.elements.text.setSelectionRange(draft.text.length, draft.text.length);
+  handleForm(async () => {
+    await api(`/rooms/${current.room.id}/edit-message`, { access: current.room.access, input: { messageId: message.id, text: encodeMentions(draft) } });
     if (form.isConnected) closeDialog();
     if (state.session === current) void refresh(current);
   });
@@ -65,7 +68,7 @@ export function showReplyComposer(current) {
   $('reply-composer').hidden = !target;
   if (!target) return;
   $('reply-target').textContent = `Replying to ${authorOf(target)}`;
-  $('reply-excerpt').textContent = target.text || target.image?.alt || 'Shared image';
+  $('reply-excerpt').textContent = displayMentions(target.text || '', current.members).text || target.image?.alt || 'Shared image';
 }
 
 function startReply(current, message) {
@@ -338,11 +341,14 @@ function showMessageOptions(current, message, mine) {
 function linkedMessageText(current, text) {
   const body = document.createDocumentFragment();
   let position = 0;
-  for (const match of text.matchAll(/https?:\/\/[^\s<>"']+|(?<![a-z0-9_@])@([a-z0-9_]{3,24}#[0-9]{4})(?![a-z0-9_#])/gi)) {
+  for (const match of text.matchAll(roomLinks)) {
     if (match[1]) {
       const username = match[1].toLowerCase();
-      if (!current.members.some(member => member.username === username)) continue;
-      const mention = element('button', 'member-mention', match[0]);
+      const target = current.members.find(member => member.username === username);
+      if (!target) continue;
+      const mention = element('button', 'member-mention', '@' + target.name);
+      mention.dataset.username = username;
+      mention.title = match[0];
       mention.setAttribute('aria-haspopup', 'dialog');
       mention.addEventListener('click', () => {
         const member = current.members.find(entry => entry.username === username);
@@ -416,7 +422,7 @@ export function appendMessages(current, messages) {
     if (message.reply_to && !unavailable) {
       const reference = element(message.reply_text ? 'button' : 'div', 'message-reference');
       if (message.reply_text) {
-        reference.append(element('strong', '', message.reply_name || 'Member'), element('span', '', message.reply_text));
+        reference.append(element('strong', '', message.reply_name || 'Member'), element('span', '', displayMentions(message.reply_text, current.members).text));
         reference.addEventListener('click', () => showHistoryResult(current.room, current.channel, message.reply_to));
       } else reference.textContent = 'Original message unavailable';
       content.append(reference);
@@ -469,6 +475,11 @@ export function appendMessages(current, messages) {
 }
 
 export function updateMessageAuthors(current) {
+  for (const tag of $('messages').querySelectorAll('.member-mention')) {
+    const target = current.members.find(member => member.username === tag.dataset.username);
+    const label = '@' + (target?.name || tag.dataset.username);
+    if (tag.textContent !== label) tag.textContent = label;
+  }
   const people = new Map(current.members.flatMap(member => (member.memberIds ?? [member.id]).map(id => [id, member])));
   for (const row of $('messages').querySelectorAll('[data-member-id]')) {
     const member = people.get(row.dataset.memberId);

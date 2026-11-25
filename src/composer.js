@@ -3,11 +3,19 @@ import { drafts, saveStorage, saved, state } from './state.js';
 import { $, api, element, toast } from './ui.js';
 import { failedMessages, imageDrafts, pendingMessages, renderAttachment, replyDrafts, showReplyComposer } from './messages.js';
 import { openRoom, refresh } from './app.js';
+import { displayMentions, editMentionText, encodeMentions } from './mentions.js';
+
+export function restoreDraft(current) {
+  current.mentionDraft = displayMentions(drafts.get(current.draftKey) || '', current.members);
+  $('message-input').value = current.mentionDraft.text;
+}
 
 export function setDraft(value) {
   const input = $('message-input');
   input.value = value;
-  storeDraft(state.session.draftKey, value);
+  const draft = state.session.mentionDraft;
+  editMentionText(draft, value, value.endsWith(draft.text) ? value.length - draft.text.length : value.length);
+  storeDraft(state.session.draftKey, encodeMentions(draft));
   updateComposer();
   input.focus();
 }
@@ -40,13 +48,21 @@ export function chooseMention(username) {
   if (!state.mentionSuggestions || !state.session) return;
   const { start, end } = state.mentionSuggestions;
   const input = $('message-input');
-  const replacement = `@${username}${/^\s/.test(input.value.slice(end)) ? '' : ' '}`;
+  const member = state.mentionSuggestions.members.find(person => person.username === username);
+  if (!member) return;
+  const label = '@' + member.name;
+  const replacement = label + (/^\s/.test(input.value.slice(end)) ? '' : ' ');
   if (input.value.length - (end - start) + replacement.length > input.maxLength) {
     toast('This message is too long to add the mention.');
     return;
   }
   input.setRangeText(replacement, start, end, 'end');
-  storeDraft(state.session.draftKey, input.value);
+  const draft = state.session.mentionDraft;
+  editMentionText(draft, input.value, start + replacement.length);
+  draft.tags = draft.tags.filter(tag => tag.start + tag.label.length <= start || tag.start >= start + replacement.length);
+  draft.tags.push({ start, username, label });
+  draft.tags.sort((a, b) => a.start - b.start);
+  storeDraft(state.session.draftKey, encodeMentions(draft));
   updateComposer();
   sendTyping(state.session, true);
   clearMentionSuggestions();
@@ -60,7 +76,7 @@ export function showMentionSuggestions() {
     return;
   }
   const caret = input.selectionStart;
-  const token = input.value.slice(0, caret).match(/(?:^|[^a-z0-9_@])@([a-z0-9_#]{0,29})$/i);
+  const token = input.value.slice(0, caret).match(/(?:^|[^a-z0-9_@])@([^@\r\n]{0,32})$/i);
   if (!token) {
     clearMentionSuggestions();
     return;
@@ -79,7 +95,11 @@ export function showMentionSuggestions() {
     clearMentionSuggestions();
     return;
   }
-  const start = caret - query.length - 1;
+  const start = caret - token[1].length - 1;
+  if (state.session.mentionDraft.tags.some(tag => tag.start === start)) {
+    clearMentionSuggestions();
+    return;
+  }
   const end = caret + input.value.slice(caret).match(/^[a-z0-9_#]*/i)[0].length;
   state.mentionSuggestions = { start, end, members, index: 0 };
   const list = $('mention-suggestions');
@@ -122,7 +142,7 @@ export async function sendMessage(event) {
   event.preventDefault();
   const current = state.session;
   const room = current?.room;
-  const text = $('message-input').value.trim();
+  const text = current ? encodeMentions(current.mentionDraft).trim() : '';
   const attachment = imageDrafts.get(current?.draftKey);
   if (!room || (!text && !attachment) || pendingMessages.has(current.draftKey)) return;
   const { draftKey, channel } = current;
@@ -139,7 +159,7 @@ export async function sendMessage(event) {
     failedMessages.delete(draftKey);
     if (drafts.get(draftKey)?.trim() === text) {
       storeDraft(draftKey, '');
-      if (state.session?.draftKey === draftKey) $('message-input').value = '';
+      if (state.session?.draftKey === draftKey) restoreDraft(state.session);
     }
     if ((replyDrafts.get(draftKey)?.id ?? null) === replyTo) {
       replyDrafts.delete(draftKey);
