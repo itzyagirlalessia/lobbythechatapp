@@ -7,6 +7,10 @@ Newest first. Each entry is tagged with who made it:
 
 Keep entries to one line. Add yours at the top of today's date (create the date heading if needed).
 
+## 2026-11-25
+
+- **[itzyagirlalessia]** Added support for granting additional Lobby admins while preserving existing role and username settings.
+
 ## 2026-11-22
 
 - **[itzyagirlalessia]** Added a one-time What’s New notice for new and returning members, with release highlights available again from Help.
