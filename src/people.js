@@ -5,7 +5,7 @@ import { paintCover } from './profile.js';
 import { showAiSettings, showRoomBan } from './room-settings.js';
 import { social } from './app.js';
 import { listeningSlot, refreshProfileListening } from './listening.js';
-import { applyProfileDesign, profileFacts, renderProfileCode } from './profile-studio.js';
+import { applyProfileDesign, profileFacts, renderProfileCard, renderProfileCode, usesProfileCard } from './profile-studio.js';
 
 let memberCardAnchorTop = 0;
 
@@ -70,23 +70,43 @@ function renderMemberProfile(member) {
   meta.append(element('span', member.online ? 'member-presence online' : 'member-presence', member.online ? 'Online' : 'Away'));
   if (member.host) meta.append(element('span', 'member-role', 'Room host'));
   if (member.admin) meta.append(element('span', 'member-role', 'Lobby Admin'));
+  const username = member.username ? element('p', 'member-popup-username', member.username) : null;
   header.append(cover, picture, title);
-  if (member.username) header.append(element('p', 'member-popup-username', member.username));
+  if (username) header.append(username);
   header.append(meta);
   const details = element('div', 'member-popup-details');
-  if (member.status) details.append(element('p', 'profile-status', member.status));
-  if (member.bio) details.append(element('p', 'member-bio', member.bio));
-  if (member.details?.length) details.append(profileFacts(member.details));
+  // Parts a whole-card design draws inside its sandbox instead.
+  const drawnInCard = [];
+  if (member.status) drawnInCard.push(details.appendChild(element('p', 'profile-status', member.status)));
+  if (member.bio) drawnInCard.push(details.appendChild(element('p', 'member-bio', member.bio)));
+  if (member.details?.length) drawnInCard.push(details.appendChild(profileFacts(member.details)));
   if (member.design?.customEnabled) {
-    const custom = element('div', 'profile-code-container');
+    const wholeCard = usesProfileCard(member.design);
+    const custom = element('div', wholeCard ? 'profile-card-frame' : 'profile-code-container');
     custom.hidden = true;
-    details.append(custom);
+    if (!wholeCard) details.append(custom);
     const room = state.session?.room;
     const path = room ? '/rooms/' + room.id + '/profile-code?member=' + encodeURIComponent(member.id)
       : '/social/profile-code?username=' + encodeURIComponent(member.username);
     void api(path, { access: room?.access }).then(({ code }) => {
-      if (!code || !custom.isConnected) return;
-      renderProfileCode(custom, { ...member.design, ...code });
+      if (!code || panel.dataset.memberId !== member.id || panel.dataset.profileSignature !== signature) return;
+      if (!wholeCard) {
+        renderProfileCode(custom, { ...member.design, ...code });
+        positionMemberCard();
+        return;
+      }
+      const profile = { name: member.name, username: member.username, avatar: member.avatar, banner: member.banner, online: member.online,
+        status: member.status, bio: member.bio, details: member.details,
+        activities: activities.map(activity => ({ label: activity.source ? `${activity.label} · ${activity.source}` : activity.label, title: activity.title })) };
+      if (!renderProfileCard(custom, { ...member.design, ...code }, profile, positionMemberCard)) return;
+      // Lobby keeps the real name, username, presence and badges, plus links and buttons, outside the sandbox.
+      const trusted = element('div', 'member-card-trust');
+      trusted.append(title);
+      if (username) trusted.append(username);
+      trusted.append(meta);
+      for (const node of drawnInCard) node.remove();
+      panel.replaceChildren(custom, trusted);
+      if (details.childElementCount) panel.append(details);
       positionMemberCard();
     }).catch(() => {});
   }
@@ -98,7 +118,7 @@ function renderMemberProfile(member) {
     info.append(element('small', '', activity.source ? `${activity.label} · ${activity.source}` : activity.label));
     info.append(element('strong', '', activity.title));
     row.append(glyph, info);
-    details.append(row);
+    drawnInCard.push(details.appendChild(row));
   }
   const listening = listeningSlot(member, panel.querySelector('.listening-card'));
   if (listening) details.append(listening);

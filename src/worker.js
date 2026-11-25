@@ -2019,7 +2019,7 @@ export default {
     if (url.pathname === '/profile-canvas' && request.method === 'GET') {
       return new Response('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Custom profile section</title></head><body><main id="lobby-profile-content"></main></body></html>', {
         headers: { ...security, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
-          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" },
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src blob:; base-uri 'none'; form-action 'none'" },
       });
     }
     if (url.pathname.startsWith('/api/')) {
