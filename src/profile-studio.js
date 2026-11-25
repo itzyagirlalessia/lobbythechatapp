@@ -16,9 +16,10 @@ const starterHtml = '<section class="welcome-note">\n  <h2>My corner of Lobby</h
 const starterCss = '.welcome-note {\n  padding: 14px;\n  border: 1px solid var(--accent);\n  border-radius: 12px;\n}\n.welcome-note h2 { font-size: 1rem; }\n.welcome-note p { margin-bottom: 0; }';
 const cardStarterHtml = '<p>Welcome to my corner of Lobby.</p>';
 const cardStarterCss = '.banner {\n  height: 140px;\n  background: linear-gradient(135deg, var(--accent), #1b1030);\n}\n.avatar {\n  border-radius: 50%;\n  border-color: var(--accent);\n}\n.name { font-size: 1.6rem; letter-spacing: .02em; }\n.bio { font-style: italic; border-top: 2px dashed var(--accent); }\n.custom {\n  padding: 12px;\n  border: 1px solid var(--accent);\n  border-radius: 12px;\n}';
-const cardMaxHeight = 560;
+// The card frame grows to its full content height so only the popup scrolls. This only stops runaway CSS (e.g. height:100vh).
+const cardMaxHeight = 1600;
 // Lobby's default look for a whole-card design. The member's CSS comes after it and can override any of it.
-const cardCss = `.card{position:relative;overflow:hidden;background:var(--surface)}
+const cardCss = `html{overflow:hidden}.card{position:relative;overflow:hidden;background:var(--surface)}
 .card[data-finish=glow]{background:radial-gradient(ellipse at 5% 100%,color-mix(in srgb,var(--surface) 81%,var(--accent)),transparent 76%),var(--surface)}
 .card[data-finish=gradient]{background:linear-gradient(145deg,var(--surface) 32%,color-mix(in srgb,var(--surface) 76%,var(--accent)))}
 .banner{height:123px;overflow:hidden;background:linear-gradient(131deg,#1a0b3190,transparent 85%),var(--accent)}
@@ -162,9 +163,29 @@ function cardMarkup(doc, profile, design) {
   return card;
 }
 
-function fitFrame(frame) {
+const resizeWatchers = new WeakMap();
+
+function resizeFrame(frame) {
   const height = frame.contentDocument?.body?.scrollHeight;
-  if (height) frame.height = String(Math.min(cardMaxHeight, height));
+  if (!height) return false;
+  const next = String(Math.min(cardMaxHeight, height));
+  if (frame.height === next) return false;
+  frame.height = next;
+  return true;
+}
+
+// Keep the frame as tall as its content, also when it changes later (opening <details>, images loading).
+function fitFrame(frame) {
+  const body = frame.contentDocument?.body;
+  if (!body) return;
+  const watcher = resizeWatchers.get(frame);
+  if (watcher?.body !== body) {
+    watcher?.observer.disconnect();
+    const observer = new ResizeObserver(() => { if (resizeFrame(frame)) frames.get(frame)?.painted?.(); });
+    observer.observe(body);
+    resizeWatchers.set(frame, { body, observer });
+  }
+  resizeFrame(frame);
 }
 
 function paintCode(frame) {

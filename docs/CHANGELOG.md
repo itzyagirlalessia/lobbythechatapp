@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[Wilmer]** Whole-card profile designs now grow to their full height (also when a section is opened), so the profile popup has a single scrollbar.
 - **[itzyagirlalessia]** Promoted Wilmer’s whole-card HTML/CSS option to the main site.
 - **[Wilmer]** Profile Studio can now style the whole profile card with HTML/CSS (sandboxed), while the real name, badges and buttons stay outside it.
 - **[itzyagirlalessia]** Room mentions show the selected member’s display name in drafts and messages and deliver to their account.
