@@ -9,6 +9,7 @@ Keep entries to one line. Add yours at the top of today's date (create the date 
 
 ## 2026-11-25
 
+- **[itzyagirlalessia]** Room mentions show the selected member’s display name in drafts and messages and deliver to their account.
 - **[itzyagirlalessia]** Promoted Wilmer’s Profile Studio code switch and two-user browser test to the main release.
 - **[Wilmer]** Profile Studio's HTML / CSS tab now shows one code box with an HTML / CSS switch instead of two boxes.
 - **[Wilmer]** Added the optional browser smoke test in `scripts/smoke/` (two signed-in users through the real UI), documented in the README.
