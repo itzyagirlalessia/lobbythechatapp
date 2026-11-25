@@ -3,6 +3,7 @@ import { createVoiceController } from './voice.js';
 import { createRoomBoard } from './board.js';
 import { createSocial } from './social.js';
 import { drafts, loadAccountStorage, preferences, saveStorage, saved, state } from './state.js';
+import { editMentionText, encodeMentions } from './mentions.js';
 import { $, api, avatar, closeDialog, closeMemberCard, dialogForm, element, handleForm, icon, narrowScreen, notifyAttention, showDialog, toast } from './ui.js';
 import { inviteCode, removeInviteFragment, restoreAccess, showInvite, showRoomForm, syncAccountRooms } from './rooms.js';
 import { applyOwnProfile, renderProfile, showAccountMenu, showProfileEditor, showStatusForm, showUsernameSetup } from './profile.js';
@@ -14,14 +15,14 @@ import { syncMessageDates } from './message-time.js';
 import { bindReleaseNotice, prepareReleaseNotice } from './release-notice.js';
 import { appendMessages, imageDrafts, jumpLatest, nearLatest, readVisibleMessages, renderAttachment, replyDrafts, showAttachImage, showMessageEditor, showPollCreator, showReplyComposer, updateHistoryNote, updateMessageAuthors } from './messages.js';
 import { highlightMessage, refreshMentions, renderMentionBadge, showBookmarks, showHistoryResult, showMentions, showPins, showSearch } from './history.js';
-import { chooseMention, clearMentionSuggestions, selectMentionSuggestion, sendMessage, sendTyping, setDraft, showMentionSuggestions, showTyping, storeDraft, updateComposer } from './composer.js';
+import { chooseMention, clearMentionSuggestions, restoreDraft, selectMentionSuggestion, sendMessage, sendTyping, setDraft, showMentionSuggestions, showTyping, storeDraft, updateComposer } from './composer.js';
 import { applyPreferences, bindSidebarResize, showHelp, showPreferences, showShortcuts, showSwitcher, toggleSidebar } from './settings.js';
 
 export const voice = createVoiceController(api, renderVoiceDock, toast);
 export const roomBoard = createRoomBoard({
   api, element, icon, showDialog, dialogForm, handleForm, closeDialog, toast,
   getSession: () => state.session,
-  getDraft: () => $('message-input').value,
+  getDraft: () => state.session ? encodeMentions(state.session.mentionDraft) : '',
   showMessage: showHistoryResult,
   remind: showReminder,
 });
@@ -267,7 +268,7 @@ export function openRoom(room, channel = room.lastChannel || 'general', through 
   clearMentionSuggestions();
   $('earlier-messages').hidden = true;
   updateHistoryNote(current);
-  $('message-input').value = drafts.get(current.draftKey) || '';
+  restoreDraft(current);
   $('message-input').placeholder = `Message #${channel}`;
   $('ai-thinking').hidden = true;
   showTyping([]);
@@ -340,7 +341,9 @@ export async function refresh(current) {
     }
     current.aiConnected = data.aiConnected;
     if (JSON.stringify(current.members) !== JSON.stringify(data.members)) {
+      const firstRoster = !current.members.length;
       current.members = data.members;
+      if (firstRoster && drafts.get(current.draftKey)?.includes('@')) restoreDraft(current);
       renderPeople(data.members);
       updateMessageAuthors(current);
     }
@@ -499,9 +502,12 @@ document.querySelectorAll('[data-format]').forEach(button => button.addEventList
   const mark = button.dataset.format;
   const { selectionStart: start, selectionEnd: end } = input;
   if (!state.session || input.value.length + mark.length * 2 > input.maxLength) return;
+  const draft = state.session.mentionDraft;
+  editMentionText(draft, input.value.slice(0, end) + mark + input.value.slice(end), end + mark.length);
   input.setRangeText(mark + input.value.slice(start, end) + mark, start, end, 'end');
   input.setSelectionRange(start + mark.length, end + mark.length);
-  storeDraft(state.session.draftKey, input.value);
+  editMentionText(draft, input.value, start + mark.length);
+  storeDraft(state.session.draftKey, encodeMentions(draft));
   updateComposer();
   input.focus();
 }));
@@ -552,7 +558,8 @@ narrowScreen.addEventListener('change', () => toggleSidebar(false));
 document.querySelectorAll('[data-room-title]').forEach(button => button.addEventListener('click', () => showRoomForm({ title: button.dataset.roomTitle })));
 $('composer').addEventListener('submit', sendMessage);
 $('message-input').addEventListener('input', event => {
-  storeDraft(state.session.draftKey, event.target.value);
+  editMentionText(state.session.mentionDraft, event.target.value, event.target.selectionStart);
+  storeDraft(state.session.draftKey, encodeMentions(state.session.mentionDraft));
   updateComposer();
   sendTyping(state.session, Boolean(event.target.value.trim()));
   if (!event.isComposing) showMentionSuggestions();
