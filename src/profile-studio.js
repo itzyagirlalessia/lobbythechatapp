@@ -124,10 +124,14 @@ export function designFields() {
 }
 
 export const codeFields = `<fieldset class="profile-section studio-code"><legend>Custom profile section</legend>
-  <p>Use HTML for content and CSS to style it. The preview appears inside your profile card. Common text and layout tags are supported.</p>
+  <p>Write HTML for content, then switch to CSS to style it. The preview appears inside your profile card. Common text and layout tags are supported.</p>
   <label class="profile-share"><input type="checkbox" data-design="customEnabled"><span><strong>Show custom section</strong></span></label>
-  <label class="field">HTML<textarea data-design="html" rows="7" maxlength="${profileCodeLimit}" spellcheck="false" autocapitalize="off"></textarea></label>
-  <label class="field">CSS<textarea data-design="css" rows="7" maxlength="${profileCodeLimit}" spellcheck="false" autocapitalize="off"></textarea></label>
+  <div class="studio-tabs studio-code-switch" role="group" aria-label="Code to edit">
+    <button type="button" data-code-view="html" aria-pressed="true">HTML</button>
+    <button type="button" data-code-view="css" aria-pressed="false">CSS</button>
+  </div>
+  <label class="field" data-code-pane="html"><span class="visually-hidden">HTML</span><textarea data-design="html" rows="10" maxlength="${profileCodeLimit}" spellcheck="false" autocapitalize="off"></textarea></label>
+  <label class="field" data-code-pane="css" hidden><span class="visually-hidden">CSS</span><textarea data-design="css" rows="10" maxlength="${profileCodeLimit}" spellcheck="false" autocapitalize="off"></textarea></label>
   <label class="field">Section height<input type="number" data-design="customHeight" min="80" max="420" step="1"><small>80–420 px</small></label>
   <button class="button outline" type="button" id="studio-code-example">Insert starter</button>
 </fieldset>`;
@@ -178,6 +182,13 @@ export function bindProfileStudio(form, initial) {
     assign(normalizeProfileDesign(), visualKeys);
     changed();
   });
+  const codeViews = [...form.querySelectorAll('[data-code-view]')];
+  function showCode(view, focus = false) {
+    for (const button of codeViews) button.setAttribute('aria-pressed', String(button.dataset.codeView === view));
+    for (const pane of form.querySelectorAll('[data-code-pane]')) pane.hidden = pane.dataset.codePane !== view;
+    if (focus) fields[view].focus();
+  }
+  for (const button of codeViews) button.addEventListener('click', () => showCode(button.dataset.codeView, true));
   const starter = form.querySelector('#studio-code-example');
   const updateStarter = () => { starter.disabled = Boolean(fields.html.value.trim() || fields.css.value.trim()); };
   form.addEventListener('input', updateStarter);
@@ -185,7 +196,7 @@ export function bindProfileStudio(form, initial) {
   starter.addEventListener('click', () => {
     assign({ html: starterHtml, css: starterCss, customEnabled: true }, ['html', 'css', 'customEnabled']);
     changed();
-    fields.html.focus();
+    showCode('html', true);
   });
   return () => normalizeProfileDesign(Object.fromEntries(Object.entries(fields).map(([key, field]) => [
     key, field.type === 'checkbox' ? field.checked : field.type === 'number' ? field.valueAsNumber : field.value,
