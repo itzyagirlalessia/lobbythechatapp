@@ -137,12 +137,11 @@ function accountId(request) {
   return request.headers.get('oai-authenticated-user-id') || null;
 }
 
-function accountAssignment(env, email) {
-  if (!email || !env.DUO_ACCOUNT_ASSIGNMENTS) return null;
+function accountAssignments(raw) {
   try {
-    return JSON.parse(env.DUO_ACCOUNT_ASSIGNMENTS)?.[email] ?? null;
+    return new Map(Object.entries(JSON.parse(raw || '{}')));
   } catch {
-    return null;
+    return new Map();
   }
 }
 
@@ -361,11 +360,12 @@ async function withRandomTag(db, base, save) {
   throw new AppError(409, 'Couldn’t assign a tag. Try again.');
 }
 
-async function ownProfile(env, ctx, request, id, admin, assigned, usernameOnly = false) {
+async function ownProfile(env, ctx, request, id, admin, assigned, badgeKey, usernameOnly = false) {
   const providers = { ...liveProviders(env), spotify: Boolean(spotifyConfig(env, new URL(request.url))) };
   const profileResponse = async entry => {
     const profile = profileData(entry);
     if (entry) {
+      await syncBadgeKey(env.DB, id, entry, badgeKey);
       const connected = await env.DB.prepare('SELECT 1 FROM spotify_connections WHERE account_id = ? AND credentials IS NOT NULL').bind(id).first();
       profile.spotifyConnected = Boolean(connected);
     }
@@ -700,10 +700,42 @@ async function roomActivity(env, roomId, memberId) {
   return { game, music };
 }
 
-function isAdmin(env, email, assignment) {
-  const emailLists = [env.DUO_ADMIN_EMAILS, env.DUO_ADDITIONAL_ADMIN_EMAILS];
-  return Boolean(email && (assignment?.admin === true
-    || emailLists.some(list => list?.toLowerCase().split(',').some(entry => entry.trim() === email))));
+let badgeConfig;
+let badgeDirectory;
+function adminDirectory(env) {
+  const inputs = [env.DUO_ADMIN_EMAILS, env.DUO_ADDITIONAL_ADMIN_EMAILS, env.DUO_ACCOUNT_ASSIGNMENTS];
+  if (!badgeConfig || inputs.some((value, index) => value !== badgeConfig[index])) {
+    badgeConfig = inputs;
+    badgeDirectory = buildAdminDirectory(...inputs);
+  }
+  return badgeDirectory;
+}
+
+async function buildAdminDirectory(primary, additional, rawAssignments) {
+  const assignments = accountAssignments(rawAssignments);
+  const admins = new Set([primary, additional].flatMap(list => (list || '').toLowerCase().split(',').map(email => email.trim())).filter(Boolean));
+  const reserved = new Set();
+  const emails = new Set(admins);
+  for (const [email, assignment] of assignments) {
+    if (assignment?.admin === true) admins.add(email);
+    if (admins.has(email) || reservedUsernames.has(assignment?.username)) emails.add(email);
+    if (admins.has(email) && reservedUsernames.has(assignment?.username)) reserved.add(assignment.username);
+  }
+  const keys = new Map(await Promise.all([...emails].map(async email => [email, await hash('lobby-admin-badge:' + email)])));
+  const active = new Set([...admins].map(email => keys.get(email)));
+  return { assignments, admins, keys,
+    // Existing reserved handles were issued by the server before badge keys existed.
+    hasBadge: person => person.admin_badge_key == null ? reserved.has(person.username) : active.has(person.admin_badge_key),
+  };
+}
+
+async function syncBadgeKey(db, account, profile, key) {
+  if (!profile || key === undefined) return;
+  const next = key ?? (reservedUsernames.has(profile.username) ? '' : null);
+  if (profile.admin_badge_key !== next) {
+    await db.prepare('UPDATE profiles SET admin_badge_key = ? WHERE account_id = ? AND admin_badge_key IS ?')
+      .bind(next, account, profile.admin_badge_key).run();
+  }
 }
 
 function requireModerator(member, admin) {
@@ -1464,9 +1496,9 @@ async function socialPeer(db, username, account) {
   return peer;
 }
 
-function publicPerson(entry) {
+function publicPerson(entry, roles) {
   const profile = profileData(entry);
-  return { ...profile, design: visibleProfileDesign(profile.design, entry.design_revision), name: entry.display_name || entry.username.split('#')[0] };
+  return { ...profile, admin: roles.hasBadge(entry), design: visibleProfileDesign(profile.design, entry.design_revision), name: entry.display_name || entry.username.split('#')[0] };
 }
 
 async function socialProfileCode(db, account, username) {
@@ -1487,7 +1519,7 @@ async function roomProfileCode(db, roomId, memberId) {
   return { code: visibleProfileCode(JSON.parse(profile?.design_json || 'null')) };
 }
 
-async function socialOverview(db, account) {
+async function socialOverview(db, account, roles) {
   const [friends, blocked, threads] = await db.batch([
     db.prepare(`SELECT p.*, f.state, f.requester = ? AS outgoing FROM friendships f JOIN profiles p
       ON p.account_id = CASE WHEN f.first_account = ? THEN f.second_account ELSE f.first_account END
@@ -1501,9 +1533,9 @@ async function socialOverview(db, account) {
       WHERE t.first_account = ? OR t.second_account = ? ORDER BY t.updated_at DESC LIMIT 100`).bind(account, account, account, account, account, account),
   ]);
   return {
-    friends: friends.results.map(p => ({ ...publicPerson(p), state: p.state, outgoing: Boolean(p.outgoing) })),
+    friends: friends.results.map(p => ({ ...publicPerson(p, roles), state: p.state, outgoing: Boolean(p.outgoing) })),
     blocked: blocked.results.map(p => ({ username: p.username, name: p.display_name || p.username.split('#')[0] })),
-    threads: threads.results.map(p => ({ ...publicPerson(p), id: p.id, unread: p.unread, preview: p.preview || 'Start the conversation', updatedAt: p.updated_at })),
+    threads: threads.results.map(p => ({ ...publicPerson(p, roles), id: p.id, unread: p.unread, preview: p.preview || 'Start the conversation', updatedAt: p.updated_at })),
   };
 }
 
@@ -1564,12 +1596,12 @@ async function directThread(db, account, id) {
   return thread;
 }
 
-async function directHistory(db, account, thread, before) {
+async function directHistory(db, account, thread, before, roles) {
   const peerAccount = thread.first_account === account ? thread.second_account : thread.first_account;
   const peer = await db.prepare('SELECT * FROM profiles WHERE account_id = ?').bind(peerAccount).first();
   const { results } = await db.prepare(`SELECT id, account_id = ? AS mine, CASE WHEN deleted_at IS NULL THEN text END AS text, created_at, edited_at, deleted_at IS NOT NULL AS deleted
     FROM direct_messages WHERE thread_id = ? AND id < ? ORDER BY id DESC LIMIT 81`).bind(account, thread.id, before).all();
-  return { id: thread.id, peer: publicPerson(peer), canSend: Boolean(thread.can_send), earlier: results.length > 80, messages: results.slice(0, 80).reverse() };
+  return { id: thread.id, peer: publicPerson(peer, roles), canSend: Boolean(thread.can_send), earlier: results.length > 80, messages: results.slice(0, 80).reverse() };
 }
 
 async function directAction(db, account, thread, action, input) {
@@ -1610,10 +1642,10 @@ async function directAction(db, account, thread, action, input) {
   return { ok: true };
 }
 
-async function handleSocial(db, request, url, account) {
+async function handleSocial(db, request, url, account, roles) {
   if (!account) throw new AppError(401, 'Sign in and choose a username to use friends and DMs.');
   const path = url.pathname.slice('/api/social'.length);
-  if (path === '' && request.method === 'GET') return json(await socialOverview(db, account));
+  if (path === '' && request.method === 'GET') return json(await socialOverview(db, account, roles));
   if (path === '/profile-code' && request.method === 'GET') return json(await socialProfileCode(db, account, url.searchParams.get('username')));
   if (request.method === 'POST' && path === '/friends') return json(await requestFriend(db, account, await body(request)));
   if (request.method === 'POST' && path === '/friend-action') return json(await friendAction(db, account, await body(request)));
@@ -1621,12 +1653,12 @@ async function handleSocial(db, request, url, account) {
   const match = path.match(/^\/direct\/([a-f0-9-]+)(?:\/(messages|edit|delete|read))?$/);
   if (!match) throw new AppError(404, 'Social endpoint not found.');
   const thread = await directThread(db, account, match[1]);
-  if (request.method === 'GET' && !match[2]) return json(await directHistory(db, account, thread, url.searchParams.has('before') ? messageId(Number(url.searchParams.get('before'))) : Number.MAX_SAFE_INTEGER));
+  if (request.method === 'GET' && !match[2]) return json(await directHistory(db, account, thread, url.searchParams.has('before') ? messageId(Number(url.searchParams.get('before'))) : Number.MAX_SAFE_INTEGER, roles));
   if (request.method === 'POST' && match[2]) return json(await directAction(db, account, thread, match[2], await body(request)));
   throw new AppError(405, 'This action is unavailable.');
 }
 
-async function getRoom(db, roomId, member, admin, channel, after, revision, through, spotifyEnabled) {
+async function getRoom(db, roomId, member, admin, channel, after, revision, through, spotifyEnabled, roles) {
   await deliverScheduled(db, roomId);
   const now = Date.now();
   if (member.last_seen < now - 22_000) {
@@ -1637,7 +1669,7 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
   const [people, page, channels, voice] = await db.batch([
     db.prepare(`SELECT m.id, m.account_id, m.name, m.is_host, m.last_seen, m.typing_channel, m.typing_until, p.display_name, p.bio, p.color,
       p.game, p.music, p.share_activity, p.steam, p.lastfm, p.spotify, p.spotify_track, p.spotify_artist,
-      s.credentials IS NOT NULL AS spotify_connected, p.avatar_key, p.banner_key, p.details_json,
+      s.credentials IS NOT NULL AS spotify_connected, p.avatar_key, p.banner_key, p.details_json, p.admin_badge_key,
       json_remove(p.design_json, '$.html', '$.css') AS design_json, p.design_revision, p.username, p.status_text, p.status_until
       FROM members m LEFT JOIN profiles p ON p.account_id = m.account_id LEFT JOIN spotify_connections s ON s.account_id = p.account_id
       WHERE m.room_id = ? AND NOT EXISTS (SELECT 1 FROM room_bans b WHERE b.room_id = m.room_id AND b.actor = CASE WHEN m.account_id IS NOT NULL THEN 'account:' || m.account_id ELSE 'member:' || m.id END)
@@ -1722,7 +1754,7 @@ async function getRoom(db, roomId, member, admin, channel, after, revision, thro
     typing: [...new Map(people.results.filter(person => person.id !== member.id && (!member.account_id || person.account_id !== member.account_id)
       && person.typing_channel === channel && person.typing_until > now).map(person => [memberActor(person), person.display_name || person.name])).values()].slice(0, 3),
     members: uniqueRoomPeople(people.results, member).map(person => ({
-      id: person.id, memberIds: person.memberIds, mine: person.mine,
+      id: person.id, memberIds: person.memberIds, mine: person.mine, admin: roles.hasBadge(person),
       name: person.display_name || person.name, username: person.username || '', color: person.color, bio: person.bio || '',
       status: activeStatus(person, now),
       avatar: mediaUrl(person.avatar_key), banner: mediaUrl(person.banner_key), details: JSON.parse(person.details_json || '[]'),
@@ -1878,17 +1910,20 @@ async function handleApi(request, env, ctx, url) {
   if (!env.DB) throw new AppError(503, 'Room storage is unavailable.');
   const account = accountId(request);
   const email = account && request.headers.get('oai-authenticated-user-email')?.trim().toLowerCase();
-  const assignment = accountAssignment(env, email);
-  const admin = isAdmin(env, email, assignment);
+  const roles = await adminDirectory(env);
+  const assignment = roles.assignments.get(email);
+  const admin = Boolean(email && roles.admins.has(email));
+  const badgeKey = email ? roles.keys.get(email) ?? null : undefined;
   const assigned = reservedUsernames.has(assignment?.username) ? assignment.username : null;
-  if (url.pathname === '/api/profile' && (method === 'GET' || method === 'POST')) return json(await ownProfile(env, ctx, request, account, admin, assigned));
-  if (url.pathname === '/api/profile/username' && method === 'POST') return json(await ownProfile(env, ctx, request, account, admin, assigned, true));
+  if (url.pathname === '/api/profile' && (method === 'GET' || method === 'POST')) return json(await ownProfile(env, ctx, request, account, admin, assigned, badgeKey));
+  if (url.pathname === '/api/profile/username' && method === 'POST') return json(await ownProfile(env, ctx, request, account, admin, assigned, badgeKey, true));
   if (url.pathname === '/api/profile/browser-rooms' && method === 'POST') return json(await verifyBrowserRooms(env.DB, account, await body(request)));
   if (url.pathname === spotifyCallback && method === 'GET') return spotifyConnection(request, env, url, account);
   if (account) {
-    const profile = await env.DB.prepare('SELECT username FROM profiles WHERE account_id = ?').bind(account).first();
-    if (assigned && profile?.username !== assigned) await assignReservedUsername(env.DB, account, assigned);
+    let profile = await env.DB.prepare('SELECT username, admin_badge_key FROM profiles WHERE account_id = ?').bind(account).first();
+    if (assigned && profile?.username !== assigned) profile = await assignReservedUsername(env.DB, account, assigned);
     else if (!profile?.username) throw usernameRequired();
+    await syncBadgeKey(env.DB, account, profile, badgeKey);
   }
   if (url.pathname.startsWith('/api/profile/spotify/')) return spotifyConnection(request, env, url, account);
   if (method === 'POST' && url.pathname === '/api/profile/seen-release') {
@@ -1902,7 +1937,7 @@ async function handleApi(request, env, ctx, url) {
     return json({ seen: true });
   }
   if (method === 'POST' && url.pathname === '/api/profile/status') return json(await updateStatus(env.DB, account, await body(request)));
-  if (url.pathname === '/api/social' || url.pathname.startsWith('/api/social/')) return handleSocial(env.DB, request, url, account);
+  if (url.pathname === '/api/social' || url.pathname.startsWith('/api/social/')) return handleSocial(env.DB, request, url, account, roles);
   if (method === 'POST' && url.pathname === '/api/rooms') return json(await createRoom(env.DB, await body(request), account), 201);
   if (method === 'POST' && url.pathname === '/api/join') return json(await joinRoom(env.DB, await body(request), account), 201);
   if (method === 'GET' && url.pathname === '/api/my-rooms') return json(await accountRooms(env.DB, account));
@@ -1942,7 +1977,7 @@ async function handleApi(request, env, ctx, url) {
     const after = Math.max(0, Number.parseInt(url.searchParams.get('after') ?? '0', 10) || 0);
     const through = url.searchParams.has('through') ? messageId(Number(url.searchParams.get('through'))) : null;
     const channel = await getChannel(env.DB, roomId, url.searchParams.get('channel'));
-    return json(await getRoom(env.DB, roomId, member, admin, channel, after, url.searchParams.get('revision'), through, Boolean(spotifyConfig(env, url))));
+    return json(await getRoom(env.DB, roomId, member, admin, channel, after, url.searchParams.get('revision'), through, Boolean(spotifyConfig(env, url)), roles));
   }
   if (method === 'POST' && action === 'ai') return json(await configureAi(env, roomId, member, await body(request)));
   if (method === 'POST' && action === 'channels') return json(await createChannel(env.DB, roomId, member, admin, await body(request)), 201);

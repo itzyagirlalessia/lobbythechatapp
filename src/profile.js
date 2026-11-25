@@ -328,7 +328,7 @@ export function renderProfile() {
   detail.replaceChildren();
   if (state.admin) {
     detail.innerHTML = icon('shield');
-    detail.append('Lobby admin');
+    detail.append('Lobby Admin');
   } else {
     detail.textContent = active ? (active.host ? 'Room host' : 'Room member') : 'My profile';
   }
