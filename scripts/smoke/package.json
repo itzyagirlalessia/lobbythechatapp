@@ -1,0 +1,7 @@
+{
+  "name": "lobby-smoke-test",
+  "private": true,
+  "type": "module",
+  "description": "Browser smoke test for Lobby: two signed-in users against a local test server. Dev-only; not deployed.",
+  "dependencies": { "playwright-core": "^1.50.0" }
+}
