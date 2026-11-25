@@ -89,6 +89,22 @@ await step('bob replies, alice sees it', async () => {
   await b.press('#message-input', 'Enter');
   await a.waitForFunction(() => document.getElementById('messages').textContent.includes('Hi alice'), null, { timeout: 10000 });
 });
+await step('display name mention reaches Alice', async () => {
+  await b.fill('#message-input', '@ali');
+  const choice = b.getByRole('option').filter({ hasText: '@alice_test#' });
+  const label = '@' + await choice.locator('strong').innerText();
+  await choice.click();
+  if ((await b.inputValue('#message-input')).trim() !== label) throw new Error('Draft shows the wrong mention label');
+  await b.press('#message-input', 'Enter');
+  const tag = a.locator('#messages .member-mention').filter({ hasText: label });
+  if (await tag.innerText() !== label) throw new Error('Sent mention shows the wrong label');
+  await tag.click();
+  await a.getByRole('dialog').filter({ hasText: /alice_test#\d{4}/ }).waitFor();
+  await a.keyboard.press('Escape');
+  await a.click('#mentions-inbox');
+  await a.locator('#mention-results .history-result-text').filter({ hasText: label }).waitFor();
+  await a.keyboard.press('Escape');
+});
 await step('people list shows both', async () => {
   await a.waitForFunction(() => { const t = document.body.textContent; return t.includes('alice_test') || t.includes('bob'); }, null, { timeout: 8000 });
 });

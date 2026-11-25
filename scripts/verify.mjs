@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { openLocalDatabase } from './local-db.mjs';
 import { latestRelease } from '../src/releases.js';
+import { displayMentions, editMentionText, encodeMentions } from '../src/mentions.js';
 import './build.mjs';
 
 const { default: app } = await import('../dist/server/index.js');
@@ -730,6 +731,15 @@ await request(`${roomPath}/channel-settings`, { ...settings, slowSeconds: 0 }, h
 assert.equal((await request(roomPath, null, cameron.access)).channelSettings[focusChannel].slowSeconds, 0);
 
 const tag = claimed.profile.username;
+const sameName = [{ name: 'Blue Sky', username: 'other#1234' }, { name: 'Blue Sky', username: tag }];
+const mentionDraft = displayMentions(`@other#1234 @${tag}`, sameName);
+assert.equal(mentionDraft.text, '@Blue Sky @Blue Sky');
+editMentionText(mentionDraft, '@Blue Sky', 0);
+assert.equal(encodeMentions(mentionDraft), '@' + tag);
+editMentionText(mentionDraft, 'Hi @Blue Sky', 3);
+assert.equal(encodeMentions(mentionDraft), 'Hi @' + tag);
+editMentionText(mentionDraft, 'Hi @Blue Sea', 12);
+assert.equal(encodeMentions(mentionDraft), 'Hi @Blue Sea');
 const tagged = await request(`${roomPath}/messages`, {
   id: randomUUID(), channel: focusChannel, text: `Are you in, @${tag.toUpperCase()}?`,
 }, host.access, 201);
