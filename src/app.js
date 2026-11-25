@@ -183,6 +183,13 @@ export function renderChannels() {
   }
 }
 
+export function updatePageTitle() {
+  const { room, channel } = state.session ?? {};
+  const appName = state.staging ? 'Lobby Staging' : 'Lobby';
+  if (room) document.title = `${roomBoard.isOpen ? 'Room board' : `#${channel}`} · ${room.title} · ${appName}`;
+  else document.title = social.isOpen ? `Friends & DMs · ${appName}` : appName;
+}
+
 export function setPage(room) {
   closeMemberCard();
   $('room-view').hidden = !room || roomBoard.isOpen;
@@ -203,7 +210,7 @@ export function setPage(room) {
   $('room-board').classList.toggle('selected', roomBoard.isOpen);
   $('header-action').innerHTML = `${icon(room ? 'link' : 'join')}<span>${room ? 'Invite people' : 'Join a room'}</span>`;
   $('header-action').setAttribute('aria-label', room ? 'Invite people' : 'Join a room');
-  document.title = room ? `${roomBoard.isOpen ? 'Room board' : `#${state.session.channel}`} · ${room.title} · Lobby` : social.isOpen ? 'Friends & DMs · Lobby' : 'Lobby';
+  updatePageTitle();
   renderNav();
   toggleSidebar(false);
 }
@@ -414,23 +421,45 @@ function followInvite() {
   return true;
 }
 
-function followSharedLink() {
+async function followSharedLink() {
   if (followInvite()) return true;
-  const match = location.hash.match(/^#message=([a-f0-9-]{36})\/([a-z0-9-]{1,30})\/(\d{1,16})$/);
-  const id = Number(match?.[3]);
+  const hash = location.hash;
+  const [, roomId, channel, message] = hash.match(/^#message=([a-f0-9-]{36})\/([a-z0-9-]{1,30})\/(\d{1,16})$/) ?? [];
+  const id = Number(message);
   if (!Number.isSafeInteger(id) || id < 1) return false;
-  const room = saved.rooms.find(entry => entry.id === match[1]);
+  let room = saved.rooms.find(entry => entry.id === roomId);
+  if (!room && state.selfProfile?.username) {
+    const previousSession = state.session;
+    const wasSocial = social.isOpen;
+    const stillOpening = () => location.hash === hash && state.session === previousSession && social.isOpen === wasSocial;
+    try {
+      const restored = await restoreAccess({ id: roomId });
+      room = saved.rooms.find(entry => entry.id === roomId);
+      if (!room) {
+        room = restored;
+        saved.rooms.push(room);
+        saveStorage();
+        renderNav();
+      }
+    } catch (error) {
+      if (stillOpening() && error.status !== 404) {
+        toast(error.message);
+        return false;
+      }
+    }
+    if (!stillOpening()) return true;
+  }
   if (!room) {
     toast('Join this room with an invite link, then reopen the message link.');
     return false;
   }
-  removeInviteFragment();
-  showHistoryResult(room, match[2], id);
+  history.replaceState(history.state, '', location.pathname + location.search);
+  showHistoryResult(room, channel, id);
   return true;
 }
 
-export function restorePage() {
-  if (state.usernameSetup || followSharedLink()) return;
+export async function restorePage() {
+  if (state.usernameSetup || await followSharedLink()) return;
   const room = saved.rooms.find(entry => entry.id === saved.active);
   if (room) openRoom(room);
   else setPage();
@@ -583,7 +612,7 @@ document.addEventListener('visibilitychange', () => {
   syncMessageDates();
   if (!state.usernameSetup && state.session) void refresh(state.session);
 });
-window.addEventListener('hashchange', () => { if (!state.usernameSetup) followSharedLink(); });
+window.addEventListener('hashchange', () => { if (!state.usernameSetup) void followSharedLink(); });
 window.addEventListener('resize', positionMemberCard);
 window.addEventListener('pagehide', voice.disconnect);
 window.addEventListener('pagehide', () => social.stop());
@@ -594,10 +623,9 @@ bindSidebarResize();
 bindReleaseNotice();
 applyPreferences();
 void api('/profile').then(async data => {
-  if (data.environment === 'staging') {
-    $('staging-label').hidden = false;
-    document.title = 'Lobby Staging';
-  }
+  state.staging = data.environment === 'staging';
+  $('staging-label').hidden = !state.staging;
+  updatePageTitle();
   await loadAccountStorage(data.browserAccount, rooms => api('/profile/browser-rooms', { input: { rooms } }));
   saveStorage();
   applyPreferences();
@@ -621,7 +649,7 @@ void api('/profile').then(async data => {
   }
   if (data.signedIn && !data.profile.username) showUsernameSetup();
   else {
-    restorePage();
+    await restorePage();
     void syncAccountRooms();
     prepareReleaseNotice(data);
   }

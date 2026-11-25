@@ -7,6 +7,10 @@ Newest first. Each entry is tagged with who made it:
 
 Keep entries to one line. Add yours at the top of today's date (create the date heading if needed).
 
+## 2026-11-25
+
+- **[itzyagirlalessia]** Fixed shared message links on fresh browsers, reciprocal friend request feedback, losing new DM drafts after a slow send, and staging tab titles.
+
 ## 2026-11-23
 
 - **[Wilmer]** Added an optional `DUO_ALLOWED_EMAILS` lock so only invited accounts can use a private site such as Lobby Staging.

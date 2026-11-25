@@ -52,9 +52,10 @@ export function showRoomForm({ title, invite, joining = false } = {}) {
 }
 
 export async function restoreAccess(room) {
-  const restored = await api('/my-rooms/restore', { input: { roomId: room.id } });
-  Object.assign(room, { access: restored.access, memberId: restored.memberId, name: restored.name, host: restored.host });
-  if (!room.invite) room.inviteVersion = restored.inviteVersion;
+  const { access, memberId, name, host, inviteVersion, ...identity } = await api('/my-rooms/restore', { input: { roomId: room.id } });
+  if (!room.access) Object.assign(room, identity);
+  Object.assign(room, { access, memberId, name, host });
+  if (!room.invite) room.inviteVersion = inviteVersion;
   saveStorage();
   return room;
 }
