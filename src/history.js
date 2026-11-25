@@ -3,6 +3,7 @@ import { saveStorage, saved, state } from './state.js';
 import { $, api, closeDialog, dialogForm, element, handleForm, notifyAttention, pictureImage, showDialog } from './ui.js';
 import { authorOf, messageAction, showSharedImage, toggleBookmark } from './messages.js';
 import { toggleSidebar } from './settings.js';
+import { displayMentions } from './mentions.js';
 import { openRoom, roomBoard, setPage } from './app.js';
 
 export function showHistoryResult(room, channel, id) {
@@ -73,7 +74,7 @@ export async function showMentions() {
   if (!state.session) return;
   const current = state.session;
   const { room } = current;
-  showDialog('Mentions inbox', '<p>Messages that mention your username in this room.</p><div id="mention-results" class="history-results" aria-live="polite"><p>Loading mentions…</p></div>');
+  showDialog('Mentions inbox', '<p>Messages that tag you in this room.</p><div id="mention-results" class="history-results" aria-live="polite"><p>Loading mentions…</p></div>');
   const list = $('mention-results');
   try {
     const messages = await loadMentions(current);
@@ -157,7 +158,8 @@ function historyResult(room, message, label) {
   const result = element('button', 'history-result');
   const meta = element('span', 'history-result-meta');
   meta.append(element('strong', '', authorOf(message)), element('small', '', label));
-  result.append(meta, element('span', 'history-result-text', message.text));
+  const members = state.session?.room.id === room.id ? state.session.members : [];
+  result.append(meta, element('span', 'history-result-text', displayMentions(message.text || '', members).text));
   result.addEventListener('click', () => showHistoryResult(room, message.channel, message.id));
   return result;
 }
